@@ -125,6 +125,48 @@ export default function RootLayout({
                     }, 1000);
                   }
                 }).observe(document, { subtree: true, childList: true });
+                
+                // Enhanced mobile ad optimization
+                const isMobile = window.innerWidth < 768;
+                if (isMobile) {
+                  // Track mobile usage for better ad targeting
+                  if (typeof gtag !== 'undefined') {
+                    gtag('event', 'mobile_tool_usage', {
+                      'device_type': 'mobile',
+                      'screen_width': window.innerWidth,
+                      'tool_name': toolName
+                    });
+                  }
+                  
+                  // Optimize mobile ad loading
+                  const mobileAds = document.querySelectorAll('.adsbygoogle[data-ad-channel="mobile"]');
+                  mobileAds.forEach(ad => {
+                    ad.setAttribute('data-ad-format', 'fluid');
+                    ad.setAttribute('data-full-width-responsive', 'true');
+                  });
+                }
+                
+                // Enhanced viewability tracking for better ad performance
+                const observeAdViewability = () => {
+                  const ads = document.querySelectorAll('.adsbygoogle');
+                  const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                      if (entry.isIntersecting && typeof gtag !== 'undefined') {
+                        const adSlot = entry.target.getAttribute('data-ad-slot');
+                        gtag('event', 'ad_impression', {
+                          'ad_slot': adSlot,
+                          'visibility_ratio': entry.intersectionRatio,
+                          'device_type': isMobile ? 'mobile' : 'desktop'
+                        });
+                      }
+                    });
+                  }, { threshold: [0.5, 1.0] });
+                  
+                  ads.forEach(ad => observer.observe(ad));
+                };
+                
+                // Start observing after a short delay
+                setTimeout(observeAdViewability, 2000);
               });
             `
           }}

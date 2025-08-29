@@ -9,6 +9,8 @@ interface AdBannerProps {
   fullWidthResponsive?: boolean
   className?: string
   style?: React.CSSProperties
+  mobileOptimized?: boolean
+  sticky?: boolean
 }
 
 export function AdBanner({
@@ -16,12 +18,23 @@ export function AdBanner({
   adFormat = "auto",
   fullWidthResponsive = true,
   className = "",
-  style = {}
+  style = {},
+  mobileOptimized = false,
+  sticky = false
 }: AdBannerProps) {
   const [isClient, setIsClient] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   
   useEffect(() => {
     setIsClient(true)
+    setIsMobile(window.innerWidth < 768)
+    
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   // Don't render if ads are disabled
@@ -37,7 +50,7 @@ export function AdBanner({
   // Show placeholder in development
   if (process.env.NODE_ENV === "development") {
     return (
-      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm min-h-[90px] flex items-center justify-center ${className}`}>
+      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm min-h-[90px] flex items-center justify-center ${sticky ? 'sticky-ad' : ''} ${mobileOptimized && isMobile ? 'mobile-sticky-ad' : ''} ${className}`}>
         <div className="text-gray-600 font-medium mb-1">Ad Space</div>
         <div className="text-xs text-gray-400">{adSlot}</div>
       </div>
@@ -56,21 +69,50 @@ export function AdBanner({
     }
   }, [])
 
+  // Enhanced mobile ad format
+  const getMobileAdFormat = () => {
+    if (!isMobile) return adFormat
+    
+    switch (adFormat) {
+      case "horizontal":
+        return "fluid"
+      case "rectangle":
+        return "auto"
+      default:
+        return "auto"
+    }
+  }
+
+  const getAdStyle = () => {
+    const baseStyle = {
+      display: "block",
+      textAlign: "center" as const,
+      minHeight: isMobile ? "60px" : "90px",
+      ...style
+    }
+    
+    if (mobileOptimized && isMobile) {
+      return {
+        ...baseStyle,
+        width: "100%",
+        maxWidth: "100%"
+      }
+    }
+    
+    return baseStyle
+  }
+
   return (
-    <div className={`ad-container min-h-[90px] flex items-center justify-center ${className}`} style={style}>
+    <div className={`ad-container ${isMobile ? 'min-h-[60px]' : 'min-h-[90px]'} flex items-center justify-center ${sticky ? 'sticky-ad' : ''} ${mobileOptimized && isMobile ? 'mobile-sticky-ad' : ''} ${className}`} style={style}>
       <ins
         className="adsbygoogle"
-        style={{
-          display: "block",
-          textAlign: "center",
-          minHeight: "90px",
-          ...style
-        }}
+        style={getAdStyle()}
         data-ad-client={APP_CONFIG.adsensePublisherId}
         data-ad-slot={adSlot}
-        data-ad-format={adFormat}
+        data-ad-format={getMobileAdFormat()}
         data-full-width-responsive={fullWidthResponsive.toString()}
         data-adtest={process.env.NODE_ENV === "development" ? "on" : "off"}
+        data-ad-channel={isMobile ? "mobile" : "desktop"}
       />
     </div>
   )

@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
   Copy, 
   Download, 
@@ -25,7 +27,8 @@ import {
   Share2,
   Heart,
   AlertCircle,
-  FileText
+  FileText,
+  Menu
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { AdBanner } from "@/components/ads/ad-banner"
@@ -77,6 +80,16 @@ export function TextToolLayout({
   const [error, setError] = useState("")
   const [stats, setStats] = useState<any>(null)
   const [toolOptions, setToolOptions] = useState<Record<string, any>>({})
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // Initialize options with defaults
   useEffect(() => {
@@ -159,6 +172,113 @@ export function TextToolLayout({
     return fileExtensions[0] || ".txt"
   }
 
+  // Mobile Options Sidebar
+  const MobileOptionsSidebar = () => (
+    <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+      <SheetContent side="bottom" className="h-[70vh] p-0">
+        <SheetHeader className="px-6 py-4 border-b bg-gray-50">
+          <SheetTitle className="flex items-center space-x-2">
+            <Icon className="h-5 w-5 text-teal-600" />
+            <span>{title} Options</span>
+          </SheetTitle>
+        </SheetHeader>
+        
+        <ScrollArea className="h-full">
+          <div className="p-6 space-y-6">
+            {/* Tool Options */}
+            {options.map((option) => (
+              <div key={option.key} className="space-y-2">
+                <Label className="text-sm font-medium">{option.label}</Label>
+                
+                {option.type === "select" && (
+                  <Select
+                    value={toolOptions[option.key]?.toString()}
+                    onValueChange={(value) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {option.selectOptions?.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {option.type === "checkbox" && (
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Checkbox
+                      checked={toolOptions[option.key] || false}
+                      onCheckedChange={(checked) => setToolOptions(prev => ({ ...prev, [option.key]: checked }))}
+                    />
+                    <span className="text-sm">{option.label}</span>
+                  </div>
+                )}
+
+                {option.type === "slider" && (
+                  <div className="space-y-3">
+                    <Slider
+                      value={[toolOptions[option.key] || option.defaultValue]}
+                      onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                      min={option.min}
+                      max={option.max}
+                      step={option.step}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{option.min}</span>
+                      <span className="font-medium bg-gray-100 px-2 py-1 rounded">{toolOptions[option.key] || option.defaultValue}</span>
+                      <span>{option.max}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Mobile Examples */}
+            {examples.length > 0 && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Examples</Label>
+                <div className="space-y-2">
+                  {examples.map((example, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      onClick={() => {
+                        loadExample(example.content)
+                        setIsMobileSidebarOpen(false)
+                      }}
+                      className="w-full h-auto p-3 text-left justify-start"
+                    >
+                      <div>
+                        <div className="font-medium text-sm">{example.name}</div>
+                        <div className="text-xs text-gray-500 mt-1 truncate">
+                          {example.content.substring(0, 40)}...
+                        </div>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Ad */}
+            <div className="py-4">
+              <AdBanner 
+                adSlot="mobile-text-sidebar"
+                adFormat="auto"
+                className="w-full"
+                mobileOptimized={true}
+              />
+            </div>
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  )
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -168,22 +288,23 @@ export function TextToolLayout({
         <div className="container mx-auto px-4 py-3">
           <AdBanner 
             adSlot="tool-header-banner"
-            adFormat="horizontal"
+            adFormat="auto"
             className="max-w-4xl mx-auto"
+            mobileOptimized={true}
           />
         </div>
       </div>
 
       {/* Header */}
       <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-3 lg:py-4">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <span className="text-2xl font-bold text-gray-900">Code</span>
             <Heart className="h-6 w-6 text-teal-500 fill-teal-500" />
             <span className="text-2xl font-bold text-gray-900">Beautify</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">{title}</h1>
-          <div className="flex items-center justify-center space-x-4 mb-4">
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2 text-center">{title}</h1>
+          <div className="flex flex-wrap items-center justify-center gap-2 lg:gap-4 mb-4">
             <Button variant="ghost" className="text-blue-600">
               <Heart className="h-4 w-4 mr-2" />
               Add to Fav
@@ -194,18 +315,29 @@ export function TextToolLayout({
             <Button variant="outline">
               Save & Share
             </Button>
+            {/* Mobile Settings Button */}
+            {isMobile && options.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="lg:hidden"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Options
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main Interface */}
       <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
           {/* Input Panel */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 px-4 lg:px-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1 lg:space-x-2 overflow-x-auto">
                   <Button variant="ghost" size="sm">
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -221,14 +353,14 @@ export function TextToolLayout({
                   <Button variant="ghost" size="sm" onClick={() => setInput("")}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="hidden lg:flex">
                     <Eye className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="text-sm text-gray-500">Sample</div>
+                <div className="text-xs lg:text-sm text-gray-500">Sample</div>
               </div>
               
-              <Tabs defaultValue="file" className="w-full">
+              <Tabs defaultValue="file" className="w-full hidden lg:block">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="file">
                     <FileText className="h-4 w-4 mr-2" />
@@ -241,16 +373,16 @@ export function TextToolLayout({
                 </TabsList>
               </Tabs>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 lg:px-6">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={placeholder}
-                className="min-h-[400px] font-mono text-sm resize-none border-0 focus:ring-0"
+                className="min-h-[300px] lg:min-h-[400px] font-mono text-sm resize-none border-0 focus:ring-0"
               />
               <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
                 <span>Ln: {input.split('\n').length} Col: {input.length}</span>
-                <div className="flex space-x-4">
+                <div className="flex space-x-2 lg:space-x-4">
                   <span>JSON</span>
                   <span>UTF-8</span>
                 </div>
@@ -260,9 +392,9 @@ export function TextToolLayout({
 
           {/* Output Panel */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 px-4 lg:px-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1 lg:space-x-2 overflow-x-auto">
                   <Button variant="ghost" size="sm">
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -272,14 +404,14 @@ export function TextToolLayout({
                   <Button variant="ghost" size="sm" onClick={() => downloadFile(output, `output${getFileExtension()}`)}>
                     <Download className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="hidden lg:flex">
                     <Share2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="hidden lg:flex">
                     <Eye className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="text-sm font-medium bg-gray-800 text-white px-2 py-1 rounded">
+                <div className="text-xs lg:text-sm font-medium bg-gray-800 text-white px-2 py-1 rounded">
                   Output
                 </div>
               </div>
@@ -293,9 +425,9 @@ export function TextToolLayout({
                 <label htmlFor="auto-update" className="text-sm">Auto Update</label>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 lg:px-6">
               {error ? (
-                <div className="min-h-[400px] flex items-center justify-center text-red-500 bg-red-50 rounded border">
+                <div className="min-h-[300px] lg:min-h-[400px] flex items-center justify-center text-red-500 bg-red-50 rounded border">
                   <div className="text-center">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2" />
                     <p>{error}</p>
@@ -306,12 +438,12 @@ export function TextToolLayout({
                   value={output}
                   readOnly
                   placeholder={outputPlaceholder}
-                  className="min-h-[400px] font-mono text-sm resize-none border-0 focus:ring-0"
+                  className="min-h-[300px] lg:min-h-[400px] font-mono text-sm resize-none border-0 focus:ring-0"
                 />
               )}
               <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
                 <span>Ln: {output.split('\n').length} Col: {output.length}</span>
-                <div className="flex space-x-4">
+                <div className="flex space-x-2 lg:space-x-4">
                   <span>TOML</span>
                   <span>UTF-8</span>
                 </div>
@@ -321,16 +453,17 @@ export function TextToolLayout({
         </div>
 
         {/* Center Ad */}
-        <div className="mb-8">
+        <div className="mb-6 lg:mb-8">
           <AdBanner 
             adSlot="text-tool-center"
-            adFormat="horizontal"
+            adFormat="auto"
             className="max-w-4xl mx-auto"
+            mobileOptimized={true}
           />
         </div>
 
         {/* Tool Options */}
-        {options.length > 0 && (
+        {options.length > 0 && !isMobile && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle>Options</CardTitle>
@@ -400,7 +533,7 @@ export function TextToolLayout({
             {title}
           </Button>
           
-          <div className="flex justify-center space-x-4">
+          <div className="flex flex-wrap justify-center gap-2 lg:gap-4">
             <Button 
               variant="outline"
               onClick={() => downloadFile(output, `converted${getFileExtension()}`)}
@@ -409,7 +542,7 @@ export function TextToolLayout({
               <Download className="h-4 w-4 mr-2" />
               Download
             </Button>
-            <Button variant="outline" className="text-blue-600">
+            <Button variant="outline" className="text-blue-600 hidden lg:flex">
               JSON Sorter
             </Button>
           </div>
@@ -422,10 +555,10 @@ export function TextToolLayout({
               <CardTitle>Statistics</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {Object.entries(stats).map(([key, value]) => (
                   <div key={key} className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">{value}</div>
+                    <div className="text-xl lg:text-2xl font-bold text-gray-900">{value}</div>
                     <div className="text-sm text-gray-600">{key}</div>
                   </div>
                 ))}
@@ -438,13 +571,14 @@ export function TextToolLayout({
         <div className="mt-8">
           <AdBanner 
             adSlot="text-tool-bottom"
-            adFormat="horizontal"
+            adFormat="auto"
             className="max-w-4xl mx-auto"
+            mobileOptimized={true}
           />
         </div>
 
         {/* Examples */}
-        {examples.length > 0 && (
+        {examples.length > 0 && !isMobile && (
           <div className="mt-12">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">{title}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -466,8 +600,22 @@ export function TextToolLayout({
             </div>
           </div>
         )}
+
+        {/* Mobile Sticky Bottom Ad */}
+        {isMobile && (
+          <div className="mt-8 pb-20">
+            <AdBanner 
+              adSlot="mobile-bottom-sticky"
+              adFormat="auto"
+              className="w-full"
+              mobileOptimized={true}
+              sticky={true}
+            />
+          </div>
+        )}
       </div>
 
+      <MobileOptionsSidebar />
       <Footer />
     </div>
   )

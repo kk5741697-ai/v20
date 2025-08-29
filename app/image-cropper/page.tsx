@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { 
   Upload, 
   Download, 
@@ -25,7 +26,8 @@ import {
   Move,
   Square,
   Circle,
-  RotateCcw
+  RotateCcw,
+  Settings
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { ImageProcessor } from "@/lib/processors/image-processor"
@@ -122,11 +124,14 @@ export default function ImageCropperPage() {
   const [imageScale, setImageScale] = useState(1)
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 })
   const [showUploadArea, setShowUploadArea] = useState(true)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [canvasReady, setCanvasReady] = useState(false)
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
+  const animationFrameRef = useRef<number>()
 
   useEffect(() => {
     const defaultOptions: Record<string, any> = {}
@@ -137,24 +142,68 @@ export default function ImageCropperPage() {
   }, [])
 
   useEffect(() => {
-    if (file && canvasRef.current && containerRef.current) {
-      calculateImageFit()
-      drawCanvas()
+    if (file && canvasRef.current && containerRef.current && canvasReady) {
+      // Use requestAnimationFrame to prevent flickering
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+      
+      animationFrameRef.current = requestAnimationFrame(() => {
+        calculateImageFit()
+        drawCanvas()
+      })
     }
-  }, [file, zoomLevel])
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [file, zoomLevel, canvasReady])
 
   useEffect(() => {
-    if (file) {
-      drawCanvas()
+    if (file && canvasReady) {
+      // Debounced canvas redraw to prevent flickering
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+      
+      animationFrameRef.current = requestAnimationFrame(() => {
+        drawCanvas()
+      })
     }
-  }, [file?.cropArea])
+  }, [file?.cropArea, canvasReady])
 
-  const calculateImageFit = () => {
-    if (!file || !containerRef.current) return
+  // Initialize canvas when container is ready
+  useEffect(() => {
+    if (containerRef.current && canvasRef.current) {
+      const resizeObserver = new ResizeObserver(() => {
+        setCanvasReady(true)
+      })
+      
+      resizeObserver.observe(containerRef.current)
+      
+      return () => {
+        resizeObserver.disconnect()
+      }
+    }
+  }, [])
+
+  const calculateImageFit = useCallback(() => {
+    if (!file || !containerRef.current || !canvasRef.current) return
 
     const container = containerRef.current
-    const containerWidth = container.clientWidth
-    const containerHeight = container.clientHeight
+    const canvas = canvasRef.current
+    
+    // Set canvas size to match container
+    const rect = container.getBoundingClientRect()
+    const containerWidth = rect.width
+    const containerHeight = rect.height
+    
+    // Update canvas size
+    canvas.width = containerWidth
+    canvas.height = containerHeight
+    
     const imageAspect = file.dimensions.width / file.dimensions.height
     const containerAspect = containerWidth / containerHeight
 
@@ -172,9 +221,14 @@ export default function ImageCropperPage() {
       offsetY = 0
     }
 
+    // Ensure minimum scale and proper bounds
+    scale = Math.max(0.1, scale)
+    offsetX = Math.max(0, offsetX)
+    offsetY = Math.max(0, offsetY)
+
     setImageScale(scale)
     setImageOffset({ x: offsetX, y: offsetY })
-  }
+  }, [file, zoomLevel])
 
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
@@ -207,6 +261,10 @@ export default function ImageCropperPage() {
       setFile(imageFile)
       setProcessedFile(null)
       setShowUploadArea(false)
+      setCanvasReady(false)
+      
+      // Small delay to ensure DOM is ready
+      setTimeout(() => setCanvasReady(true), 100)
       
       toast({
         title: "Image uploaded",
@@ -239,42 +297,46 @@ export default function ImageCropperPage() {
     })
   }
 
-  const drawCanvas = () => {
-    if (!file || !canvasRef.current || !containerRef.current) return
+  const drawCanvas = useCallback(() => {
+    if (!file || !canvasRef.current || !containerRef.current || !canvasReady) return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")!
-    const container = containerRef.current
     
-    // Set canvas size to container size
-    canvas.width = container.clientWidth
-    canvas.height = container.clientHeight
-
+    // Clear canvas with proper bounds checking
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // Draw background
+    ctx.fillStyle = "#f8fafc"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    
     const img = new Image()
     img.onload = () => {
       imageRef.current = img
       
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      // Calculate display dimensions with proper bounds
+      const displayWidth = Math.max(10, file.dimensions.width * imageScale)
+      const displayHeight = Math.max(10, file.dimensions.height * imageScale)
       
-      // Draw background
-      ctx.fillStyle = "#f8fafc"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      // Ensure image stays within canvas bounds
+      const adjustedOffsetX = Math.max(0, Math.min(canvas.width - displayWidth, imageOffset.x))
+      const adjustedOffsetY = Math.max(0, Math.min(canvas.height - displayHeight, imageOffset.y))
       
-      // Calculate display dimensions
-      const displayWidth = file.dimensions.width * imageScale
-      const displayHeight = file.dimensions.height * imageScale
-      
-      // Draw image
-      ctx.drawImage(img, imageOffset.x, imageOffset.y, displayWidth, displayHeight)
-      
-      // Draw crop overlay
-      drawCropOverlay(ctx, displayWidth, displayHeight, imageOffset.x, imageOffset.y)
+      // Draw image with bounds checking
+      if (displayWidth > 0 && displayHeight > 0) {
+        ctx.drawImage(img, adjustedOffsetX, adjustedOffsetY, displayWidth, displayHeight)
+        
+        // Draw crop overlay
+        drawCropOverlay(ctx, displayWidth, displayHeight, adjustedOffsetX, adjustedOffsetY)
+      }
+    }
+    img.onerror = () => {
+      console.error("Failed to load image for canvas")
     }
     img.src = file.preview
-  }
+  }, [file, imageScale, imageOffset, canvasReady])
 
-  const drawCropOverlay = (
+  const drawCropOverlay = useCallback((
     ctx: CanvasRenderingContext2D, 
     imageWidth: number, 
     imageHeight: number, 
@@ -283,24 +345,32 @@ export default function ImageCropperPage() {
   ) => {
     if (!file) return
 
-    // Calculate crop area in canvas coordinates
-    const cropX = imageX + (file.cropArea.x / 100) * imageWidth
-    const cropY = imageY + (file.cropArea.y / 100) * imageHeight
-    const cropWidth = (file.cropArea.width / 100) * imageWidth
-    const cropHeight = (file.cropArea.height / 100) * imageHeight
+    // Calculate crop area in canvas coordinates with bounds checking
+    const cropX = Math.max(imageX, imageX + (file.cropArea.x / 100) * imageWidth)
+    const cropY = Math.max(imageY, imageY + (file.cropArea.y / 100) * imageHeight)
+    const cropWidth = Math.min(imageWidth, (file.cropArea.width / 100) * imageWidth)
+    const cropHeight = Math.min(imageHeight, (file.cropArea.height / 100) * imageHeight)
+
+    // Ensure crop area is within image bounds
+    const maxCropX = Math.min(cropX, imageX + imageWidth - cropWidth)
+    const maxCropY = Math.min(cropY, imageY + imageHeight - cropHeight)
+    const finalCropX = Math.max(imageX, maxCropX)
+    const finalCropY = Math.max(imageY, maxCropY)
+    const finalCropWidth = Math.max(10, Math.min(cropWidth, imageWidth))
+    const finalCropHeight = Math.max(10, Math.min(cropHeight, imageHeight))
 
     // Draw dark overlay on entire canvas
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
     
     // Clear crop area to show original image
-    ctx.clearRect(cropX, cropY, cropWidth, cropHeight)
+    ctx.clearRect(finalCropX, finalCropY, finalCropWidth, finalCropHeight)
     
     // Redraw image in crop area only
     if (imageRef.current) {
       ctx.save()
       ctx.beginPath()
-      ctx.rect(cropX, cropY, cropWidth, cropHeight)
+      ctx.rect(finalCropX, finalCropY, finalCropWidth, finalCropHeight)
       ctx.clip()
       ctx.drawImage(imageRef.current, imageX, imageY, imageWidth, imageHeight)
       ctx.restore()
@@ -309,19 +379,19 @@ export default function ImageCropperPage() {
     // Draw crop border
     ctx.strokeStyle = "#3b82f6"
     ctx.lineWidth = 3
-    ctx.strokeRect(cropX, cropY, cropWidth, cropHeight)
+    ctx.strokeRect(finalCropX, finalCropY, finalCropWidth, finalCropHeight)
     
-    // Draw resize handles
-    const handleSize = 12
+    // Draw resize handles with better touch targets for mobile
+    const handleSize = window.innerWidth < 768 ? 16 : 12
     const handles = [
-      { x: cropX - handleSize/2, y: cropY - handleSize/2, cursor: "nw-resize", handle: "nw" },
-      { x: cropX + cropWidth/2 - handleSize/2, y: cropY - handleSize/2, cursor: "n-resize", handle: "n" },
-      { x: cropX + cropWidth - handleSize/2, y: cropY - handleSize/2, cursor: "ne-resize", handle: "ne" },
-      { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "e-resize", handle: "e" },
-      { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "se-resize", handle: "se" },
-      { x: cropX + cropWidth/2 - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "s-resize", handle: "s" },
-      { x: cropX - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "sw-resize", handle: "sw" },
-      { x: cropX - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "w-resize", handle: "w" },
+      { x: finalCropX - handleSize/2, y: finalCropY - handleSize/2, cursor: "nw-resize", handle: "nw" },
+      { x: finalCropX + finalCropWidth/2 - handleSize/2, y: finalCropY - handleSize/2, cursor: "n-resize", handle: "n" },
+      { x: finalCropX + finalCropWidth - handleSize/2, y: finalCropY - handleSize/2, cursor: "ne-resize", handle: "ne" },
+      { x: finalCropX + finalCropWidth - handleSize/2, y: finalCropY + finalCropHeight/2 - handleSize/2, cursor: "e-resize", handle: "e" },
+      { x: finalCropX + finalCropWidth - handleSize/2, y: finalCropY + finalCropHeight - handleSize/2, cursor: "se-resize", handle: "se" },
+      { x: finalCropX + finalCropWidth/2 - handleSize/2, y: finalCropY + finalCropHeight - handleSize/2, cursor: "s-resize", handle: "s" },
+      { x: finalCropX - handleSize/2, y: finalCropY + finalCropHeight - handleSize/2, cursor: "sw-resize", handle: "sw" },
+      { x: finalCropX - handleSize/2, y: finalCropY + finalCropHeight/2 - handleSize/2, cursor: "w-resize", handle: "w" },
     ]
     
     // Draw handles
@@ -336,18 +406,21 @@ export default function ImageCropperPage() {
     // Draw center move handle
     ctx.fillStyle = "#1d4ed8"
     ctx.strokeStyle = "#ffffff"
-    const centerSize = 16
-    ctx.fillRect(cropX + cropWidth/2 - centerSize/2, cropY + cropHeight/2 - centerSize/2, centerSize, centerSize)
-    ctx.strokeRect(cropX + cropWidth/2 - centerSize/2, cropY + cropHeight/2 - centerSize/2, centerSize, centerSize)
+    const centerSize = window.innerWidth < 768 ? 20 : 16
+    const centerX = finalCropX + finalCropWidth/2 - centerSize/2
+    const centerY = finalCropY + finalCropHeight/2 - centerSize/2
+    
+    ctx.fillRect(centerX, centerY, centerSize, centerSize)
+    ctx.strokeRect(centerX, centerY, centerSize, centerSize)
     
     // Draw move icon
     ctx.fillStyle = "#ffffff"
-    ctx.font = "12px Arial"
+    ctx.font = `${centerSize * 0.75}px Arial`
     ctx.textAlign = "center"
-    ctx.fillText("✥", cropX + cropWidth/2, cropY + cropHeight/2 + 4)
-  }
+    ctx.fillText("✥", finalCropX + finalCropWidth/2, finalCropY + finalCropHeight/2 + 4)
+  }, [file])
 
-  const updateCropArea = (newCropArea: CropArea) => {
+  const updateCropArea = useCallback((newCropArea: CropArea) => {
     if (!file) return
     
     // Apply aspect ratio constraint if set
@@ -370,16 +443,16 @@ export default function ImageCropperPage() {
       }
     }
     
-    // Ensure crop area stays within bounds
+    // Ensure crop area stays within bounds with better validation
     newCropArea.x = Math.max(0, Math.min(100 - newCropArea.width, newCropArea.x))
     newCropArea.y = Math.max(0, Math.min(100 - newCropArea.height, newCropArea.y))
     newCropArea.width = Math.max(5, Math.min(100 - newCropArea.x, newCropArea.width))
     newCropArea.height = Math.max(5, Math.min(100 - newCropArea.y, newCropArea.height))
     
     setFile(prev => prev ? { ...prev, cropArea: newCropArea } : null)
-  }
+  }, [file, toolOptions.aspectRatio])
 
-  const getMousePosition = (e: React.MouseEvent | React.TouchEvent) => {
+  const getMousePosition = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current
     if (!canvas) return { x: 0, y: 0 }
     
@@ -397,11 +470,12 @@ export default function ImageCropperPage() {
         y: e.clientY - rect.top
       }
     }
-  }
+  }, [])
 
-  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!file || !canvasRef.current) return
+  const handleMouseDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (!file || !canvasRef.current || !canvasReady) return
     
+    e.preventDefault()
     const { x, y } = getMousePosition(e)
     
     const displayWidth = file.dimensions.width * imageScale
@@ -412,8 +486,10 @@ export default function ImageCropperPage() {
     const cropWidth = (file.cropArea.width / 100) * displayWidth
     const cropHeight = (file.cropArea.height / 100) * displayHeight
     
-    // Check resize handles first
-    const handleSize = 12
+    // Check resize handles first with larger touch targets for mobile
+    const handleSize = window.innerWidth < 768 ? 16 : 12
+    const touchPadding = window.innerWidth < 768 ? 8 : 4
+    
     const handles = [
       { x: cropX - handleSize/2, y: cropY - handleSize/2, handle: "nw" },
       { x: cropX + cropWidth/2 - handleSize/2, y: cropY - handleSize/2, handle: "n" },
@@ -426,7 +502,8 @@ export default function ImageCropperPage() {
     ]
     
     for (const handle of handles) {
-      if (x >= handle.x && x <= handle.x + handleSize && y >= handle.y && y <= handle.y + handleSize) {
+      if (x >= handle.x - touchPadding && x <= handle.x + handleSize + touchPadding && 
+          y >= handle.y - touchPadding && y <= handle.y + handleSize + touchPadding) {
         setIsResizing(true)
         setResizeHandle(handle.handle)
         setDragStart({ x, y })
@@ -435,11 +512,12 @@ export default function ImageCropperPage() {
     }
     
     // Check center move handle
-    const centerSize = 16
+    const centerSize = window.innerWidth < 768 ? 20 : 16
     const centerX = cropX + cropWidth/2 - centerSize/2
     const centerY = cropY + cropHeight/2 - centerSize/2
     
-    if (x >= centerX && x <= centerX + centerSize && y >= centerY && y <= centerY + centerSize) {
+    if (x >= centerX - touchPadding && x <= centerX + centerSize + touchPadding && 
+        y >= centerY - touchPadding && y <= centerY + centerSize + touchPadding) {
       setIsDragging(true)
       setDragStart({ x: x - cropX, y: y - cropY })
       return
@@ -450,11 +528,12 @@ export default function ImageCropperPage() {
       setIsDragging(true)
       setDragStart({ x: x - cropX, y: y - cropY })
     }
-  }
+  }, [file, imageScale, imageOffset, getMousePosition, canvasReady])
 
-  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!file || !canvasRef.current || (!isDragging && !isResizing)) return
+  const handleMouseMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (!file || !canvasRef.current || (!isDragging && !isResizing) || !canvasReady) return
     
+    e.preventDefault()
     const { x, y } = getMousePosition(e)
     
     const displayWidth = file.dimensions.width * imageScale
@@ -515,13 +594,13 @@ export default function ImageCropperPage() {
       updateCropArea(newCropArea)
       setDragStart({ x, y })
     }
-  }
+  }, [file, isDragging, isResizing, dragStart, imageScale, imageOffset, resizeHandle, updateCropArea, getMousePosition, canvasReady])
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false)
     setIsResizing(false)
     setResizeHandle("")
-  }
+  }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -537,6 +616,8 @@ export default function ImageCropperPage() {
     setProcessedFile(null)
     setZoomLevel(100)
     setShowUploadArea(true)
+    setCanvasReady(false)
+    setIsMobileSidebarOpen(false)
     
     const defaultOptions: Record<string, any> = {}
     cropOptions.forEach(option => {
@@ -653,6 +734,120 @@ export default function ImageCropperPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
+  // Mobile Sidebar Component
+  const MobileSidebar = () => (
+    <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+      <SheetContent side="bottom" className="h-[80vh] p-0">
+        <SheetHeader className="px-6 py-4 border-b bg-gray-50">
+          <SheetTitle className="flex items-center space-x-2">
+            <Crop className="h-5 w-5 text-cyan-600" />
+            <span>Crop Settings</span>
+          </SheetTitle>
+        </SheetHeader>
+        
+        <ScrollArea className="h-full">
+          <div className="p-6 space-y-6">
+            {/* Social Media Presets */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Social Media Presets</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {socialPresets.map((preset, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      applyPreset(preset)
+                      setIsMobileSidebarOpen(false)
+                    }}
+                    className="text-xs h-auto p-3 flex flex-col items-center"
+                    disabled={!file}
+                  >
+                    <span className="font-medium">{preset.name.split(' ')[0]}</span>
+                    <span className="text-xs text-gray-500">{preset.aspectRatio}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tool Options */}
+            {cropOptions.map((option) => (
+              <div key={option.key} className="space-y-2">
+                <Label className="text-sm font-medium">{option.label}</Label>
+                
+                {option.type === "select" && (
+                  <Select
+                    value={toolOptions[option.key]?.toString()}
+                    onValueChange={(value) => {
+                      setToolOptions(prev => ({ ...prev, [option.key]: value }))
+                    }}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {option.selectOptions?.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {option.type === "slider" && (
+                  <div className="space-y-3">
+                    <Slider
+                      value={[toolOptions[option.key] || option.defaultValue]}
+                      onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                      min={option.min}
+                      max={option.max}
+                      step={option.step}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{option.min}</span>
+                      <span className="font-medium bg-gray-100 px-2 py-1 rounded">{toolOptions[option.key] || option.defaultValue}</span>
+                      <span>{option.max}</span>
+                    </div>
+                  </div>
+                )}
+
+                {option.type === "color" && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="color"
+                      value={toolOptions[option.key] || option.defaultValue}
+                      onChange={(e) => {
+                        setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
+                      }}
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <Input
+                      value={toolOptions[option.key] || option.defaultValue}
+                      onChange={(e) => {
+                        setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
+                      }}
+                      className="flex-1 font-mono text-sm h-10"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Mobile Ad */}
+            <div className="py-4">
+              <AdBanner 
+                adSlot="mobile-crop-sidebar"
+                adFormat="auto"
+                className="w-full"
+              />
+            </div>
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  )
+
   // Show upload area if no file
   if (showUploadArea && !file) {
     return (
@@ -661,55 +856,55 @@ export default function ImageCropperPage() {
         
         {/* Top Ad Banner */}
         <div className="bg-white border-b">
-          <div className="container mx-auto px-4 py-3">
+          <div className="container mx-auto px-4 py-2 lg:py-3">
             <AdBanner 
               adSlot="tool-header-banner"
-              adFormat="horizontal"
+              adFormat="auto"
               className="max-w-4xl mx-auto"
             />
           </div>
         </div>
 
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center mb-8">
+        <div className="container mx-auto px-4 py-6 lg:py-8">
+          <div className="text-center mb-6 lg:mb-8">
             <div className="inline-flex items-center space-x-2 mb-4">
-              <Crop className="h-8 w-8 text-cyan-600" />
-              <h1 className="text-3xl font-heading font-bold text-foreground">Crop Image</h1>
+              <Crop className="h-6 w-6 lg:h-8 lg:w-8 text-cyan-600" />
+              <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">Crop Image</h1>
             </div>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Crop images with precision using our visual editor and aspect ratio presets.
             </p>
           </div>
 
           <div className="max-w-2xl mx-auto">
             <div 
-              className="border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-16 group"
+              className="border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-8 lg:p-16 group"
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onClick={() => fileInputRef.current?.click()}
             >
-              <div className="relative mb-6">
+              <div className="relative mb-4 lg:mb-6">
                 <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
-                <Upload className="relative h-20 w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
+                <Upload className="relative h-16 w-16 lg:h-20 lg:w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
               </div>
-              <h3 className="text-2xl font-semibold mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
-              <p className="text-gray-500 mb-6 text-lg text-center">or click to browse files</p>
-              <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
-                <Upload className="h-5 w-5 mr-2" />
+              <h3 className="text-xl lg:text-2xl font-semibold mb-2 lg:mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
+              <p className="text-gray-500 mb-4 lg:mb-6 text-base lg:text-lg text-center">or tap to browse files</p>
+              <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-6 lg:px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
+                <Upload className="h-4 w-4 lg:h-5 lg:w-5 mr-2" />
                 Choose Image
               </Button>
-              <div className="mt-6 space-y-2 text-center">
+              <div className="mt-4 lg:mt-6 space-y-2 text-center">
                 <p className="text-sm text-gray-500 font-medium">JPG, PNG, WebP files</p>
                 <p className="text-xs text-gray-400">Single image • Up to 100MB</p>
               </div>
             </div>
 
             {/* Bottom Ad */}
-            <div className="mt-8">
+            <div className="mt-6 lg:mt-8">
               <AdBanner 
                 adSlot="upload-bottom-banner"
-                adFormat="horizontal"
-                className="max-w-2xl mx-auto"
+                adFormat="auto"
+                className="w-full"
               />
             </div>
           </div>
@@ -728,27 +923,122 @@ export default function ImageCropperPage() {
     )
   }
 
-  // Tool interface after file is uploaded
+  // Tool interface after file is uploaded - Responsive
   return (
     <div className="min-h-screen bg-background">
       <Header />
       
       {/* Top Ad Banner */}
       <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-2">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
           <AdBanner 
             adSlot="tool-header-banner"
-            adFormat="horizontal"
+            adFormat="auto"
             className="max-w-6xl mx-auto"
           />
         </div>
       </div>
-      
-      <div className="flex h-[calc(100vh-8rem)] w-full overflow-hidden">
-        {/* Left Canvas - Responsive with proper viewport handling */}
+
+      {/* Mobile Layout */}
+      <div className="lg:hidden">
+        {/* Mobile Header */}
+        <div className="bg-white border-b px-4 py-3 flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-2">
+            <Crop className="h-5 w-5 text-cyan-600" />
+            <h1 className="text-lg font-semibold text-gray-900">Crop Image</h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={resetTool}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setIsMobileSidebarOpen(true)}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Mobile Canvas */}
+        <div className="relative h-[60vh] overflow-hidden" ref={containerRef}>
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleMouseDown}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={handleMouseUp}
+          />
+          
+          {/* Mobile Crop Info Overlay */}
+          {file && (
+            <div className="absolute top-4 left-4 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
+              <div className="space-y-1">
+                <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
+                <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Instructions */}
+          <div className="absolute bottom-2 left-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded-lg text-center">
+            Drag to move • Drag corners to resize
+          </div>
+        </div>
+
+        {/* Mobile Bottom Actions */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 space-y-3 z-30">
+          <div className="grid grid-cols-2 gap-3">
+            <Button 
+              onClick={() => setIsMobileSidebarOpen(true)}
+              variant="outline"
+              className="py-3"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+            
+            <Button 
+              onClick={handleProcess}
+              disabled={isProcessing || !file}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white py-3"
+            >
+              {isProcessing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <>
+                  <Crop className="h-4 w-4 mr-2" />
+                  Crop
+                </>
+              )}
+            </Button>
+          </div>
+
+          {processedFile && (
+            <Button 
+              onClick={downloadFile}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Cropped Image
+            </Button>
+          )}
+        </div>
+
+        <MobileSidebar />
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="hidden lg:flex h-[calc(100vh-8rem)] w-full overflow-hidden">
+        {/* Left Canvas */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tool Header */}
-          <div className="bg-white border-b px-4 lg:px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+          <div className="bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <Crop className="h-5 w-5 text-cyan-600" />
@@ -757,11 +1047,7 @@ export default function ImageCropperPage() {
               <Badge variant="secondary">Single Mode</Badge>
             </div>
             <div className="flex items-center space-x-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={resetTool}
-              >
+              <Button variant="outline" size="sm" onClick={resetTool}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
               {file && (
@@ -781,7 +1067,7 @@ export default function ImageCropperPage() {
             </div>
           </div>
 
-          {/* Canvas Content - Properly constrained to viewport */}
+          {/* Canvas Content */}
           <div className="flex-1 overflow-hidden relative" ref={containerRef}>
             <canvas
               ref={canvasRef}
@@ -801,19 +1087,14 @@ export default function ImageCropperPage() {
                 <div className="space-y-1">
                   <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
                   <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
-                  <div className="text-gray-300 hidden lg:block">Use arrow keys • Shift+arrows for 5px steps</div>
+                  <div className="text-gray-300">Use arrow keys • Shift+arrows for 5px steps</div>
                 </div>
               </div>
             )}
-
-            {/* Mobile Instructions */}
-            <div className="lg:hidden absolute bottom-2 left-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded-lg text-center">
-              Drag to move • Drag corners to resize
-            </div>
           </div>
         </div>
 
-        {/* Fixed Right Sidebar - AdSense Optimized */}
+        {/* Desktop Right Sidebar */}
         <div className="w-80 xl:w-96 bg-white border-l shadow-lg flex flex-col h-full">
           {/* Sidebar Header */}
           <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
@@ -824,7 +1105,7 @@ export default function ImageCropperPage() {
             <p className="text-sm text-gray-600 mt-1">Adjust crop area and output options</p>
           </div>
 
-          {/* Sidebar Content - Scrollable */}
+          {/* Sidebar Content */}
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-6 space-y-6">
@@ -1071,8 +1352,8 @@ export default function ImageCropperPage() {
               <div className="font-medium mb-2">How to crop:</div>
               <div>• Drag the crop area to move</div>
               <div>• Drag corners/edges to resize</div>
-              <div className="hidden lg:block">• Use arrow keys for precise movement</div>
-              <div className="hidden lg:block">• Hold Shift for 5px steps</div>
+              <div>• Use arrow keys for precise movement</div>
+              <div>• Hold Shift for 5px steps</div>
             </div>
           </div>
         </div>

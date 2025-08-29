@@ -276,10 +276,10 @@ export class ImageProcessor {
           
           if (cropArea && typeof cropArea === 'object') {
             validCropArea = {
-              x: Math.max(0, Math.min(95, cropArea.x || 10)),
-              y: Math.max(0, Math.min(95, cropArea.y || 10)),
-              width: Math.max(5, Math.min(90, cropArea.width || 80)),
-              height: Math.max(5, Math.min(90, cropArea.height || 80))
+              x: Math.max(0, Math.min(100, cropArea.x || 10)),
+              y: Math.max(0, Math.min(100, cropArea.y || 10)),
+              width: Math.max(1, Math.min(100, cropArea.width || 80)),
+              height: Math.max(1, Math.min(100, cropArea.height || 80))
             }
           } else {
             // Default crop area if none provided
@@ -294,6 +294,10 @@ export class ImageProcessor {
             validCropArea.height = 100 - validCropArea.y
           }
 
+          // Ensure minimum crop dimensions
+          if (validCropArea.width < 1) validCropArea.width = 1
+          if (validCropArea.height < 1) validCropArea.height = 1
+
           // Convert percentage to pixels
           const cropX = (validCropArea.x / 100) * img.naturalWidth
           const cropY = (validCropArea.y / 100) * img.naturalHeight
@@ -303,8 +307,8 @@ export class ImageProcessor {
           // Ensure crop dimensions are valid and within image bounds
           const finalCropX = Math.max(0, Math.min(img.naturalWidth - 1, cropX))
           const finalCropY = Math.max(0, Math.min(img.naturalHeight - 1, cropY))
-          const finalCropWidth = Math.min(cropWidth, img.naturalWidth - finalCropX)
-          const finalCropHeight = Math.min(cropHeight, img.naturalHeight - finalCropY)
+          const finalCropWidth = Math.max(1, Math.min(cropWidth, img.naturalWidth - finalCropX))
+          const finalCropHeight = Math.max(1, Math.min(cropHeight, img.naturalHeight - finalCropY))
 
           if (finalCropWidth <= 0 || finalCropHeight <= 0) {
             reject(new Error("Invalid crop area - dimensions too small"))
@@ -351,6 +355,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }

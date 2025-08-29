@@ -162,6 +162,30 @@
     width: 100% !important;
     height: auto !important;
   }
+  
+  /* Mobile-specific ad optimizations */
+  .adsbygoogle[data-ad-format="fluid"] {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 50px;
+  }
+  
+  /* Mobile bottom banner ads */
+  .mobile-bottom-ad {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 8px;
+  }
+  
+  /* Adjust body padding when mobile ad is present */
+  body.has-mobile-ad {
+    padding-bottom: 80px;
+  }
 }
 
 /* SPA (Single Page Application) AdSense compatibility */
@@ -237,12 +261,33 @@
     height: auto;
     max-height: 50vh;
   }
+  
+  /* Mobile tool adjustments */
+  .mobile-tool-layout {
+    padding-bottom: 120px; /* Space for fixed bottom actions */
+  }
+  
+  .mobile-bottom-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 16px;
+    z-index: 50;
+    box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
 }
 
 /* Crop tool specific styles */
 .crop-canvas {
   touch-action: none;
   user-select: none;
+  /* Prevent flickering during interactions */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .crop-overlay {
@@ -252,10 +297,29 @@
 .crop-handle {
   pointer-events: auto;
   cursor: grab;
+  /* Better touch targets for mobile */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .crop-handle:active {
   cursor: grabbing;
+}
+
+/* Mobile-specific crop improvements */
+@media (max-width: 768px) {
+  .crop-handle {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  
+  .crop-canvas {
+    /* Improve touch responsiveness */
+    touch-action: manipulation;
+  }
 }
 
 /* AdSense optimization styles */
@@ -286,3 +350,67 @@
 .ad-canvas { grid-area: canvas; }
 .ad-sidebar { grid-area: sidebar; }
 .ad-footer { grid-area: footer; }
+
+/* Enhanced AdSense revenue optimization */
+.ad-revenue-optimized {
+  /* Ensure ads are above the fold */
+  min-height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sticky ad positioning for better viewability */
+.sticky-ad {
+  position: sticky;
+  top: 20px;
+  z-index: 10;
+}
+
+/* Mobile sticky bottom ad */
+@media (max-width: 768px) {
+  .mobile-sticky-ad {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 45;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 8px;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Improved tool responsiveness */
+.responsive-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .responsive-tool-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+/* Enhanced mobile touch interactions */
+.touch-friendly {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
+/* Prevent zoom on input focus (iOS) */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}

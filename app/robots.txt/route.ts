@@ -38,6 +38,19 @@ Disallow: /private/
 Disallow: /temp/
 Disallow: /.well-known/
 
+# Security - Block potentially harmful content
+Disallow: /download/
+Disallow: /files/
+Disallow: /uploads/
+Disallow: /tmp/
+Disallow: *.exe
+Disallow: *.zip$
+Disallow: *.rar$
+Disallow: *.dmg$
+Disallow: *.pkg$
+Disallow: *.deb$
+Disallow: *.msi$
+
 # Allow important pages
 Allow: /pdf-tools/
 Allow: /image-tools/

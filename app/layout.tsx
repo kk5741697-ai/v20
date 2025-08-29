@@ -4,6 +4,7 @@ import { Inter, Poppins } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { APP_CONFIG } from "@/lib/config"
+import { SecurityBanner } from "@/components/security-banner"
 import Script from "next/script"
 
 const inter = Inter({
@@ -38,7 +39,7 @@ export const metadata: Metadata = {
     description: "300+ professional web tools for PDF, image, QR, code, and SEO tasks.",
   },
   verification: {
-    google: "your-google-verification-code-here",
+    google: "google6adf6312a96691f1",
   },
 }
 
@@ -58,7 +59,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="google-adsense-account" content="ca-pub-4755003409431265" />
-        <meta name="google-site-verification" content="your-verification-code-here" />
+        <meta name="google-site-verification" content="google6adf6312a96691f1" />
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4755003409431265"
@@ -76,6 +77,7 @@ export default function RootLayout({
         </Script>
       </head>
       <body className={`${inter.variable} ${poppins.variable} antialiased`} suppressHydrationWarning>
+        <SecurityBanner />
         {children}
         <Toaster />
         

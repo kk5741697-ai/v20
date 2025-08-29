@@ -4,6 +4,7 @@ import { Inter, Poppins } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { APP_CONFIG } from "@/lib/config"
+import { AdSenseAutoAds } from "@/components/ads/adsense-auto-ads"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -50,18 +51,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId && (
-        <head>
-          <meta name="google-adsense-account" content={APP_CONFIG.adsensePublisherId} />
-          <script
-            async
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${APP_CONFIG.adsensePublisherId}`}
-            crossOrigin="anonymous"
-          />
-        </head>
-      )}
+      <head>
+        {APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId && (
+          <>
+            <meta name="google-adsense-account" content={APP_CONFIG.adsensePublisherId} />
+            <script
+              async
+              src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${APP_CONFIG.adsensePublisherId}`}
+              crossOrigin="anonymous"
+            />
+          </>
+        )}
+      </head>
       <body className={`${inter.variable} ${poppins.variable} antialiased`}>
         {children}
+        <AdSenseAutoAds />
         <Toaster />
       </body>
     </html>

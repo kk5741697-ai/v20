@@ -229,19 +229,17 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      {/* Ad Banner */}
-      <section className="py-8 px-4">
-        <div className="container mx-auto">
-          <AdBanner 
-            adSlot="homepage-banner"
-            adFormat="horizontal"
-            className="max-w-4xl mx-auto"
-          />
-        </div>
-      </section>
-
       <section className="py-16 px-4 bg-white">
         <div className="max-w-6xl mx-auto">
+          {/* Ad Banner */}
+          <div className="mb-12">
+            <AdBanner 
+              adSlot="1234567890"
+              adFormat="auto"
+              className="max-w-4xl mx-auto"
+            />
+          </div>
+          
           <div className="text-center mb-12">
             <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">
               Why Choose PixoraTools?

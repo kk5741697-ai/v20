@@ -95,17 +95,30 @@ async function compressImages(files: any[], options: any) {
 
 export default function ImageCompressorPage() {
   return (
-    <ImageToolsLayout
-      title="Compress Image"
-      description="Compress JPG, PNG, WebP, and GIFs while saving space and maintaining quality."
-      icon={Archive}
-      toolType="compress"
-      processFunction={compressImages}
-      options={compressOptions}
-      maxFiles={20}
-      allowBatchProcessing={true}
-      supportedFormats={["image/jpeg", "image/png", "image/webp", "image/gif"]}
-      outputFormats={["jpeg", "png", "webp"]}
-    />
+    <div className="min-h-screen bg-background">
+      <ImageToolsLayout
+        title="Compress Image"
+        description="Compress JPG, PNG, WebP, and GIFs while saving space and maintaining quality."
+        icon={Archive}
+        toolType="compress"
+        processFunction={compressImages}
+        options={compressOptions}
+        maxFiles={20}
+        allowBatchProcessing={true}
+        supportedFormats={["image/jpeg", "image/png", "image/webp", "image/gif"]}
+        outputFormats={["jpeg", "png", "webp"]}
+      />
+      
+      {/* Ad Banner */}
+      <div className="container mx-auto px-4 py-8">
+        <AdBanner 
+          adSlot="tool-page-bottom"
+          adFormat="horizontal"
+          className="max-w-4xl mx-auto"
+        />
+      </div>
+      
+      <Footer />
+    </div>
   )
 }

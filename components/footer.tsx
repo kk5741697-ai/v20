@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Wrench } from "lucide-react"
+import { AdBanner } from "@/components/ads/ad-banner"
 
 const footerLinks = {
   "Tool Categories": [
@@ -37,6 +38,15 @@ export function Footer() {
   return (
     <footer className="bg-sidebar border-t">
       <div className="container mx-auto px-4 py-12">
+        {/* Ad Banner in Footer */}
+        <div className="mb-8">
+          <AdBanner 
+            adSlot="footer-banner"
+            adFormat="horizontal"
+            className="max-w-4xl mx-auto"
+          />
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="lg:col-span-1">

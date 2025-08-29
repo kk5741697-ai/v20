@@ -64,8 +64,10 @@ export async function GET() {
     '/text-diff-checker',
     '/word-counter',
     '/unit-converter',
-    '/currency-converter',
-    '/color-converter'
+    '/currency-converter', 
+    '/color-converter',
+    '/api-docs',
+    '/billing'
   ]
 
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -73,14 +75,14 @@ export async function GET() {
 ${staticPages.map(page => `  <url>
     <loc>${baseUrl}${page}</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>${page === '' ? 'daily' : 'weekly'}</changefreq>
+    <changefreq>${page === '' ? 'daily' : page.includes('tools') ? 'weekly' : 'monthly'}</changefreq>
     <priority>${page === '' ? '1.0' : '0.8'}</priority>
   </url>`).join('\n')}
 ${toolPages.map(page => `  <url>
     <loc>${baseUrl}${page}</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
   </url>`).join('\n')}
 </urlset>`
 

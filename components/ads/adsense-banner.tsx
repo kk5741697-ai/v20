@@ -61,7 +61,7 @@ export function AdSenseBanner({
           ...style
         }}
         data-ad-client="ca-pub-your-publisher-id"
-        data-ad-client={APP_CONFIG.adsensePublisherId}
+        data-ad-client="ca-pub-4755003409431265"
         data-ad-slot={adSlot}
         data-ad-format={adFormat}
         data-full-width-responsive={fullWidthResponsive.toString()}

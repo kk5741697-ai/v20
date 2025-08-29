@@ -128,7 +128,9 @@
 /* AdSense Compatibility Styles */
 .adsbygoogle {
   display: block !important;
-  text-align: center;
+  text-align: center !important;
+  min-height: 90px;
+  background-color: transparent;
 }
 
 /* Ensure ads don't interfere with layout */
@@ -137,12 +139,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 20px 0;
+  clear: both;
 }
 
 /* Mobile ad adjustments */
 @media (max-width: 768px) {
   .ad-container {
-    min-height: 50px;
+    min-height: 60px;
+    margin: 15px 0;
+  }
+  
+  .adsbygoogle {
+    min-height: 60px;
   }
 }
 

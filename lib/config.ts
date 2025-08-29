@@ -11,8 +11,8 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG: AppConfig = {
-  enableAds: true, // Enable ads for AdSense approval
-  adsensePublisherId: process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID,
+  enableAds: !!process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID, // Only enable if publisher ID is set
+  adsensePublisherId: "ca-pub-4755003409431265",
   enableAutoAds: true,
   enableAnalytics: true,
   enableSearch: true,

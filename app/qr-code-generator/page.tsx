@@ -1,8 +1,6 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,7 +36,11 @@ import {
   ZoomOut,
   Maximize2,
   RefreshCw,
-  ArrowLeft
+  ArrowLeft,
+  Square,
+  Circle,
+  Hexagon,
+  Star
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
@@ -60,6 +62,12 @@ export default function QRCodeGeneratorPage() {
   const [zoomLevel, setZoomLevel] = useState(100)
   const [frameEnabled, setFrameEnabled] = useState(false)
   const [frameText, setFrameText] = useState("Scan Me")
+  const [frameColor, setFrameColor] = useState("#000000")
+  const [gradientEnabled, setGradientEnabled] = useState(false)
+  const [gradientColor1, setGradientColor1] = useState("#000000")
+  const [gradientColor2, setGradientColor2] = useState("#333333")
+  const [eyeStyle, setEyeStyle] = useState("square")
+  const [eyeColor, setEyeColor] = useState("#000000")
   
   // Content type specific fields
   const [emailData, setEmailData] = useState({ email: "", subject: "", body: "" })
@@ -85,6 +93,20 @@ export default function QRCodeGeneratorPage() {
     { id: "wifi", label: "WIFI", icon: Wifi },
     { id: "event", label: "EVENT", icon: Calendar },
     { id: "location", label: "LOCATION", icon: MapPin },
+  ]
+
+  const styleOptions = [
+    { id: "square", label: "Square", icon: Square },
+    { id: "rounded", label: "Rounded", icon: Circle },
+    { id: "dots", label: "Dots", icon: Circle },
+    { id: "extra-rounded", label: "Extra Rounded", icon: Hexagon },
+  ]
+
+  const eyeStyleOptions = [
+    { id: "square", label: "Square", icon: Square },
+    { id: "circle", label: "Circle", icon: Circle },
+    { id: "rounded", label: "Rounded", icon: Hexagon },
+    { id: "leaf", label: "Leaf", icon: Star },
   ]
 
   const generateQRContent = () => {
@@ -138,25 +160,32 @@ export default function QRCodeGeneratorPage() {
 
       setIsGenerating(true)
 
-      // Use logo file if available, otherwise use URL
+      // Enhanced QR generation with proper styling
       const logoSrc = logoFile ? URL.createObjectURL(logoFile) : logoUrl
       const qrOptions = {
         width: qrSize[0],
-        color: {
+        color: gradientEnabled ? {
+          dark: `linear-gradient(45deg, ${gradientColor1}, ${gradientColor2})`,
+          light: backgroundColor,
+        } : {
           dark: foregroundColor,
           light: backgroundColor,
         },
         errorCorrectionLevel: errorCorrection as "L" | "M" | "Q" | "H",
-        logo: logoSrc
-          ? {
-              src: logoSrc,
-              width: qrSize[0] * 0.2,
-            }
-          : undefined,
+        logo: logoSrc ? {
+          src: logoSrc,
+          width: qrSize[0] * 0.2,
+        } : undefined,
         style: {
           shape: qrStyle,
           corners: cornerStyle,
-          dots: dotStyle
+          dots: dotStyle,
+          eyes: eyeStyle,
+          eyeColor: eyeColor,
+          frame: frameEnabled ? {
+            text: frameText,
+            color: frameColor
+          } : undefined
         }
       }
 
@@ -185,9 +214,8 @@ export default function QRCodeGeneratorPage() {
     const file = e.target.files?.[0]
     if (file && file.type.startsWith("image/")) {
       setLogoFile(file)
-      setLogoUrl("") // Clear URL when file is selected
+      setLogoUrl("")
       
-      // Create preview
       const reader = new FileReader()
       reader.onload = (e) => {
         setLogoPreview(e.target?.result as string)
@@ -596,11 +624,6 @@ export default function QRCodeGeneratorPage() {
         {/* Header */}
         <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
             <div className="flex items-center space-x-2">
               <QrCode className="h-5 w-5 text-green-600" />
               <h1 className="text-xl font-semibold text-gray-900">QR Code Generator</h1>
@@ -696,7 +719,6 @@ export default function QRCodeGeneratorPage() {
                   }}
                 />
                 
-                {/* QR Code Info Overlay */}
                 <div className="absolute bottom-4 left-4 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
                   <div className="flex items-center space-x-4">
                     <span>{qrSize[0]} × {qrSize[0]} px</span>
@@ -710,7 +732,7 @@ export default function QRCodeGeneratorPage() {
         </div>
       </div>
 
-      {/* Right Sidebar - Options */}
+      {/* Right Sidebar - Fixed and Improved */}
       <div className="w-80 bg-white border-l shadow-lg flex flex-col max-h-screen">
         {/* Sidebar Header */}
         <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
@@ -721,9 +743,9 @@ export default function QRCodeGeneratorPage() {
           <p className="text-sm text-gray-600 mt-1">Configure your QR code options</p>
         </div>
 
-        {/* Sidebar Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <ScrollArea className="flex-1">
+        {/* Sidebar Content - Scrollable */}
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
             <div className="p-6 space-y-6">
               {/* Content Input */}
               <div className="space-y-4">
@@ -735,6 +757,81 @@ export default function QRCodeGeneratorPage() {
                 {renderContentForm()}
               </div>
 
+              {/* Design Style */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <div className="h-px bg-gray-200 flex-1"></div>
+                  <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Design</Label>
+                  <div className="h-px bg-gray-200 flex-1"></div>
+                </div>
+                
+                <div>
+                  <Label className="text-sm font-medium">QR Style</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {styleOptions.map((style) => (
+                      <Button
+                        key={style.id}
+                        variant={qrStyle === style.id ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setQrStyle(style.id)}
+                        className="flex items-center space-x-2 text-xs h-10"
+                      >
+                        <style.icon className="h-4 w-4" />
+                        <span>{style.label}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Eye Style</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {eyeStyleOptions.map((style) => (
+                      <Button
+                        key={style.id}
+                        variant={eyeStyle === style.id ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setEyeStyle(style.id)}
+                        className="flex items-center space-x-2 text-xs h-10"
+                      >
+                        <style.icon className="h-4 w-4" />
+                        <span>{style.label}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Corner Style</Label>
+                  <Select value={cornerStyle} onValueChange={setCornerStyle}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="square">Square</SelectItem>
+                      <SelectItem value="rounded">Rounded</SelectItem>
+                      <SelectItem value="extra-rounded">Extra Rounded</SelectItem>
+                      <SelectItem value="circle">Circle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Dot Style</Label>
+                  <Select value={dotStyle} onValueChange={setDotStyle}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="square">Square</SelectItem>
+                      <SelectItem value="rounded">Rounded</SelectItem>
+                      <SelectItem value="dots">Dots</SelectItem>
+                      <SelectItem value="classy">Classy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {/* Colors */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-2">
@@ -743,38 +840,101 @@ export default function QRCodeGeneratorPage() {
                   <div className="h-px bg-gray-200 flex-1"></div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Foreground</Label>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <input
-                        type="color"
-                        value={foregroundColor}
-                        onChange={(e) => setForegroundColor(e.target.value)}
-                        className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
-                      />
-                      <Input
-                        value={foregroundColor}
-                        onChange={(e) => setForegroundColor(e.target.value)}
-                        className="flex-1 font-mono text-xs"
-                      />
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="gradient-enabled"
+                    checked={gradientEnabled}
+                    onCheckedChange={setGradientEnabled}
+                  />
+                  <Label htmlFor="gradient-enabled" className="text-sm">Enable Gradient</Label>
+                </div>
+
+                {gradientEnabled ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium">Gradient Start</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <input
+                          type="color"
+                          value={gradientColor1}
+                          onChange={(e) => setGradientColor1(e.target.value)}
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={gradientColor1}
+                          onChange={(e) => setGradientColor1(e.target.value)}
+                          className="flex-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Gradient End</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <input
+                          type="color"
+                          value={gradientColor2}
+                          onChange={(e) => setGradientColor2(e.target.value)}
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={gradientColor2}
+                          onChange={(e) => setGradientColor2(e.target.value)}
+                          className="flex-1 font-mono text-xs"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium">Background</Label>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <input
-                        type="color"
-                        value={backgroundColor}
-                        onChange={(e) => setBackgroundColor(e.target.value)}
-                        className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
-                      />
-                      <Input
-                        value={backgroundColor}
-                        onChange={(e) => setBackgroundColor(e.target.value)}
-                        className="flex-1 font-mono text-xs"
-                      />
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium">Foreground</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <input
+                          type="color"
+                          value={foregroundColor}
+                          onChange={(e) => setForegroundColor(e.target.value)}
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={foregroundColor}
+                          onChange={(e) => setForegroundColor(e.target.value)}
+                          className="flex-1 font-mono text-xs"
+                        />
+                      </div>
                     </div>
+                    <div>
+                      <Label className="text-sm font-medium">Background</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <input
+                          type="color"
+                          value={backgroundColor}
+                          onChange={(e) => setBackgroundColor(e.target.value)}
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={backgroundColor}
+                          onChange={(e) => setBackgroundColor(e.target.value)}
+                          className="flex-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-sm font-medium">Eye Color</Label>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <input
+                      type="color"
+                      value={eyeColor}
+                      onChange={(e) => setEyeColor(e.target.value)}
+                      className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <Input
+                      value={eyeColor}
+                      onChange={(e) => setEyeColor(e.target.value)}
+                      className="flex-1 font-mono text-xs"
+                    />
                   </div>
                 </div>
               </div>
@@ -827,7 +987,6 @@ export default function QRCodeGeneratorPage() {
                   />
                 </div>
                 
-                {/* Logo Preview */}
                 {(logoPreview || logoUrl) && (
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Logo Preview</Label>
@@ -850,11 +1009,59 @@ export default function QRCodeGeneratorPage() {
                 )}
               </div>
 
-              {/* Style Options */}
+              {/* Frame Options */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-2">
                   <div className="h-px bg-gray-200 flex-1"></div>
-                  <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Style</Label>
+                  <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Frame</Label>
+                  <div className="h-px bg-gray-200 flex-1"></div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="frame-enabled"
+                    checked={frameEnabled}
+                    onCheckedChange={setFrameEnabled}
+                  />
+                  <Label htmlFor="frame-enabled" className="text-sm">Add Frame</Label>
+                </div>
+
+                {frameEnabled && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-sm font-medium">Frame Text</Label>
+                      <Input
+                        value={frameText}
+                        onChange={(e) => setFrameText(e.target.value)}
+                        placeholder="Scan Me"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Frame Color</Label>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <input
+                          type="color"
+                          value={frameColor}
+                          onChange={(e) => setFrameColor(e.target.value)}
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={frameColor}
+                          onChange={(e) => setFrameColor(e.target.value)}
+                          className="flex-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Advanced Options */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <div className="h-px bg-gray-200 flex-1"></div>
+                  <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Advanced</Label>
                   <div className="h-px bg-gray-200 flex-1"></div>
                 </div>
 
@@ -874,55 +1081,8 @@ export default function QRCodeGeneratorPage() {
                 </div>
 
                 <div>
-                  <Label className="text-sm font-medium">QR Style</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    {["square", "rounded", "dots", "extra-rounded"].map((style) => (
-                      <Button
-                        key={style}
-                        variant={qrStyle === style ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setQrStyle(style)}
-                        className="text-xs capitalize"
-                      >
-                        {style}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="frame-enabled"
-                    checked={frameEnabled}
-                    onCheckedChange={setFrameEnabled}
-                  />
-                  <Label htmlFor="frame-enabled" className="text-sm">Add Frame</Label>
-                </div>
-
-                {frameEnabled && (
-                  <div>
-                    <Label className="text-sm font-medium">Frame Text</Label>
-                    <Input
-                      value={frameText}
-                      onChange={(e) => setFrameText(e.target.value)}
-                      placeholder="Scan Me"
-                      className="mt-1"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Size */}
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <div className="h-px bg-gray-200 flex-1"></div>
-                  <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Size</Label>
-                  <div className="h-px bg-gray-200 flex-1"></div>
-                </div>
-
-                <div>
                   <div className="flex justify-between items-center mb-2">
-                    <Label className="text-sm font-medium">Dimensions</Label>
+                    <Label className="text-sm font-medium">Size</Label>
                     <Badge variant="outline" className="text-xs">
                       {qrSize[0]} × {qrSize[0]} px
                     </Badge>
@@ -939,12 +1099,6 @@ export default function QRCodeGeneratorPage() {
                     <span>200px</span>
                     <span>2000px</span>
                   </div>
-                </div>
-
-                <div className="text-center">
-                  <Badge variant="secondary" className="text-xs">
-                    File size: ~{Math.round((qrSize[0] * qrSize[0] * 3) / 1024)}KB
-                  </Badge>
                 </div>
               </div>
 
@@ -965,119 +1119,111 @@ export default function QRCodeGeneratorPage() {
                       <span>Error Correction:</span>
                       <span className="font-medium">{errorCorrection}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span>Estimated Size:</span>
+                      <span className="font-medium">{Math.round((qrSize[0] * qrSize[0] * 3) / 1024)}KB</span>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           </ScrollArea>
+        </div>
 
-          {/* Fixed Sidebar Footer */}
-          <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
-            {/* Generate Button */}
-            <Button 
-              onClick={generateQR}
-              disabled={isGenerating || !generateQRContent().trim()}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
-              size="lg"
-            >
-              {isGenerating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Generate QR Code
-                </>
-              )}
-            </Button>
+        {/* Fixed Sidebar Footer */}
+        <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
+          {/* Generate Button */}
+          <Button 
+            onClick={generateQR}
+            disabled={isGenerating || !generateQRContent().trim()}
+            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+            size="lg"
+          >
+            {isGenerating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <QrCode className="h-4 w-4 mr-2" />
+                Generate QR Code
+              </>
+            )}
+          </Button>
 
-            {/* Download Options */}
-            {qrDataUrl && (
-              <div className="space-y-2">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-800">QR Code Ready!</span>
-                  </div>
-                  <p className="text-xs text-green-600">Choose your download format below</p>
+          {/* Download Options */}
+          {qrDataUrl && (
+            <div className="space-y-2">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center space-x-2 mb-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">QR Code Ready!</span>
                 </div>
-                
+                <p className="text-xs text-green-600">Choose your download format below</p>
+              </div>
+              
+              <Button 
+                onClick={() => downloadQR("png")}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-semibold"
+                size="lg"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download PNG
+              </Button>
+
+              <div className="grid grid-cols-3 gap-2">
                 <Button 
-                  onClick={() => downloadQR("png")}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-semibold"
-                  size="lg"
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => downloadQR("svg")}
+                  className="text-blue-600 border-blue-400 hover:bg-blue-50"
                 >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PNG
+                  SVG
                 </Button>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => downloadQR("svg")}
-                    className="text-blue-600 border-blue-400 hover:bg-blue-50"
-                  >
-                    SVG
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      toast({
-                        title: "Feature coming soon",
-                        description: "PDF export will be available in the next update",
-                      })
-                    }}
-                    className="text-orange-600 border-orange-400 hover:bg-orange-50"
-                  >
-                    PDF
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      toast({
-                        title: "Feature coming soon", 
-                        description: "EPS export will be available in the next update",
-                      })
-                    }}
-                    className="text-purple-600 border-purple-400 hover:bg-purple-50"
-                  >
-                    EPS
-                  </Button>
-                </div>
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(generateQRContent())
-                    toast({ title: "Content copied", description: "QR code content copied to clipboard" })
-                  }}
-                  className="w-full"
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => downloadQR("pdf")}
+                  className="text-orange-600 border-orange-400 hover:bg-orange-50"
                 >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy Content
+                  PDF
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => downloadQR("eps")}
+                  className="text-purple-600 border-purple-400 hover:bg-purple-50"
+                >
+                  EPS
                 </Button>
               </div>
-            )}
 
-            {/* Content Validation */}
-            {!generateQRContent().trim() && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <div className="flex items-center space-x-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <span className="text-sm text-amber-800">Please enter content to generate QR code</span>
-                </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(generateQRContent())
+                  toast({ title: "Content copied", description: "QR code content copied to clipboard" })
+                }}
+                className="w-full"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Content
+              </Button>
+            </div>
+          )}
+
+          {/* Content Validation */}
+          {!generateQRContent().trim() && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm text-amber-800">Please enter content to generate QR code</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
-
-      <Footer />
     </div>
   )
 }

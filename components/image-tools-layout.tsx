@@ -24,7 +24,10 @@ import {
   Move,
   Maximize2,
   AlertCircle,
-  Info
+  Info,
+  RotateCcw,
+  Grid,
+  Eye
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -98,6 +101,9 @@ export function ImageToolsLayout({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 })
+  const [viewMode, setViewMode] = useState<"single" | "grid">("single")
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -111,6 +117,51 @@ export function ImageToolsLayout({
     setToolOptions(defaultOptions)
   }, [options])
 
+  // Touch event handlers for mobile responsiveness
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      setTouchStart({ x: touch.clientX, y: touch.clientY })
+      setIsPanning(true)
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0]
+      const touch2 = e.touches[1]
+      const distance = Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) + 
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+      )
+      setLastTouchDistance(distance)
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault()
+    
+    if (e.touches.length === 1 && touchStart && isPanning) {
+      const touch = e.touches[0]
+      const deltaX = touch.clientX - touchStart.x
+      const deltaY = touch.clientY - touchStart.y
+      setPanOffset(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }))
+      setTouchStart({ x: touch.clientX, y: touch.clientY })
+    } else if (e.touches.length === 2 && lastTouchDistance) {
+      const touch1 = e.touches[0]
+      const touch2 = e.touches[1]
+      const distance = Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) + 
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+      )
+      
+      const scale = distance / lastTouchDistance
+      setZoomLevel(prev => Math.max(25, Math.min(400, prev * scale)))
+      setLastTouchDistance(distance)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsPanning(false)
+    setTouchStart(null)
+    setLastTouchDistance(null)
+  }
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles) return
 
@@ -177,6 +228,10 @@ export function ImageToolsLayout({
     
     if (newFiles.length > 0) {
       setSelectedFile(newFiles[0].id)
+      // Auto-switch to grid view for multiple files
+      if (newFiles.length > 1 || files.length > 0) {
+        setViewMode("grid")
+      }
       
       toast({
         title: "Images uploaded",
@@ -218,6 +273,9 @@ export function ImageToolsLayout({
     if (selectedFile === fileId) {
       const remainingFiles = files.filter(f => f.id !== fileId)
       setSelectedFile(remainingFiles.length > 0 ? remainingFiles[0].id : null)
+      if (remainingFiles.length <= 1) {
+        setViewMode("single")
+      }
     }
   }
 
@@ -228,6 +286,7 @@ export function ImageToolsLayout({
     setCropSelection(null)
     setZoomLevel(100)
     setPanOffset({ x: 0, y: 0 })
+    setViewMode("single")
     
     const defaultOptions: Record<string, any> = {}
     options.forEach(option => {
@@ -477,6 +536,24 @@ export function ImageToolsLayout({
             )}
           </div>
           <div className="flex items-center space-x-2">
+            {files.length > 1 && (
+              <div className="flex items-center border rounded-md">
+                <Button 
+                  variant={viewMode === "single" ? "default" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setViewMode("single")}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === "grid" ? "default" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setViewMode("grid")}
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <Button 
               variant="outline" 
               size="sm" 
@@ -535,6 +612,62 @@ export function ImageToolsLayout({
             </div>
           ) : (
             <div className="h-full flex flex-col">
+              {/* Enhanced Canvas with grid/single view */}
+              {viewMode === "grid" ? (
+                <div className="flex-1 overflow-auto p-6">
+                  <div className="grid gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {files.map((file) => (
+                      <div
+                        key={file.id}
+                        className={`relative group cursor-pointer transition-all duration-200 ${
+                          selectedFile === file.id 
+                            ? "ring-2 ring-blue-500 scale-105" 
+                            : "hover:scale-105 hover:shadow-lg"
+                        }`}
+                        onClick={() => {
+                          setSelectedFile(file.id)
+                          setViewMode("single")
+                        }}
+                      >
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                          <div className="aspect-square relative">
+                            <img
+                              src={file.processedPreview || file.preview}
+                              alt={file.name}
+                              className="w-full h-full object-cover"
+                            />
+                            {file.processed && (
+                              <div className="absolute top-2 right-2">
+                                <CheckCircle className="w-5 h-5 text-green-600 bg-white rounded-full" />
+                              </div>
+                            )}
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-2 left-2 w-6 h-6 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeFile(file.id)
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <div className="p-3">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-xs text-gray-500">{formatFileSize(file.size)}</span>
+                              <span className="text-xs text-gray-500">
+                                {file.dimensions.width}×{file.dimensions.height}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
               {/* Fixed Image Canvas with proper viewport */}
               <div className="flex-1 overflow-hidden relative bg-gray-100" ref={canvasRef}>
                 <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -547,6 +680,9 @@ export function ImageToolsLayout({
                           maxWidth: "calc(100vw - 400px)",
                           maxHeight: "calc(100vh - 200px)"
                         }}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                         onMouseDown={toolType === "crop" ? undefined : (e) => {
                           setIsPanning(true)
                           setLastPanPoint({ x: e.clientX, y: e.clientY })
@@ -569,11 +705,15 @@ export function ImageToolsLayout({
                           style={{ 
                             userSelect: "none",
                             cursor: toolType === "crop" ? "crosshair" : isPanning ? "grabbing" : "grab"
+                            touchAction: "none"
                           }}
                           onMouseDown={toolType === "crop" ? handleCropStart : undefined}
                           onMouseMove={toolType === "crop" ? handleCropMove : undefined}
                           onMouseUp={toolType === "crop" ? handleCropEnd : undefined}
                           onMouseLeave={toolType === "crop" ? handleCropEnd : undefined}
+                          onTouchStart={toolType === "crop" ? handleCropStart : undefined}
+                          onTouchMove={toolType === "crop" ? handleCropMove : undefined}
+                          onTouchEnd={toolType === "crop" ? handleCropEnd : undefined}
                           draggable={false}
                         />
                         
@@ -588,6 +728,12 @@ export function ImageToolsLayout({
                               height: `${cropSelection.height}%`
                             }}
                           >
+                            {/* Corner handles for precise adjustment */}
+                            <div className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
+                            <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
+                            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-full"></div>
+                            
                             {/* Crop Info */}
                             <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded shadow-md whitespace-nowrap">
                               {Math.round(cropSelection.width)}% × {Math.round(cropSelection.height)}%
@@ -613,7 +759,10 @@ export function ImageToolsLayout({
                   )}
                 </div>
               </div>
+              )}
 
+              {/* Enhanced File Thumbnails Bar */}
+              {files.length > 1 && viewMode === "single" && (
               {/* File Thumbnails Bar */}
               {files.length > 1 && (
                 <div className="border-t bg-white p-4">
@@ -648,11 +797,15 @@ export function ImageToolsLayout({
                           {file.processed && (
                             <CheckCircle className="absolute -bottom-1 -right-1 w-4 h-4 text-green-600 bg-white rounded-full" />
                           )}
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs px-1 py-0.5 rounded-b-lg">
+                            <div className="truncate">{file.name}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </ScrollArea>
                 </div>
+              )}
               )}
             </div>
           )}
@@ -699,6 +852,18 @@ export function ImageToolsLayout({
               {/* Crop Selection Info */}
               {toolType === "crop" && cropSelection && currentFile && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-blue-800">Crop Selection</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCropSelection({ x: 10, y: 10, width: 80, height: 80 })}
+                      className="h-6 text-xs"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-gray-600">Selection:</span>
@@ -898,6 +1063,7 @@ export function ImageToolsLayout({
               </div>
             )}
 
+            {/* Enhanced Statistics */}
             {files.length > 0 && (
               <div className="text-xs text-gray-500 space-y-1 pt-2 border-t">
                 <div className="flex justify-between">

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { APP_CONFIG } from "@/lib/config"
 
 interface AdBannerProps {

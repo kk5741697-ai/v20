@@ -21,7 +21,8 @@ import {
   Book,
   Video,
   MessageSquare,
-  Users
+  Users,
+  Shield
 } from "lucide-react"
 import Link from "next/link"
 

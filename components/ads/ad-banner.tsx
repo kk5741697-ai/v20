@@ -27,14 +27,20 @@ export function AdBanner({
   
   useEffect(() => {
     setIsClient(true)
-    setIsMobile(window.innerWidth < 768)
-    
-    const handleResize = () => {
+    if (typeof window !== "undefined") {
       setIsMobile(window.innerWidth < 768)
     }
     
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    const handleResize = () => {
+      if (typeof window !== "undefined") {
+        setIsMobile(window.innerWidth < 768)
+      }
+    }
+    
+    if (typeof window !== "undefined") {
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
   // Don't render if ads are disabled
@@ -44,7 +50,11 @@ export function AdBanner({
 
   // Don't render on server side
   if (!isClient) {
-    return null
+    return (
+      <div className={`min-h-[90px] ${className}`} style={style}>
+        {/* Placeholder for SSR */}
+      </div>
+    )
   }
 
   // Show placeholder in development

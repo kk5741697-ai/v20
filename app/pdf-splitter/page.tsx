@@ -66,19 +66,26 @@ async function splitPDF(files: any[], options: any) {
 
     const file = files[0]
     
-    // Prepare page ranges based on split mode
-    let pageRanges: Array<{ from: number; to: number }> = []
-    
-    if (options.splitMode === "range" && options.pageRanges) {
-      pageRanges = options.pageRanges
-    } else if (options.splitMode === "size" && options.equalParts) {
-      // This will be handled in the processor
-      pageRanges = []
+    // Enhanced options handling for different split modes
+    const processOptions = {
+      ...options,
+      extractMode: options.splitMode === "pages" ? "pages" : 
+                   options.splitMode === "size" ? "size" : "range"
     }
     
-    const splitResults = await PDFProcessor.splitPDF(file.originalFile || file.file, pageRanges, options)
+    const splitResults = await PDFProcessor.splitPDF(file.originalFile || file.file, [], processOptions)
 
-    if (options.mergeRanges && splitResults.length > 1) {
+    // Handle single file vs multiple files download logic
+    if (splitResults.length === 1) {
+      // Single file - direct download
+      const blob = new Blob([splitResults[0]], { type: "application/pdf" })
+      const downloadUrl = URL.createObjectURL(blob)
+      
+      return {
+        success: true,
+        downloadUrl,
+      }
+    } else if (options.mergeRanges && splitResults.length > 1) {
       // Merge all ranges into one PDF
       const tempFiles = splitResults.map((bytes, index) => {
         return new File([bytes], `temp-${index}.pdf`, { type: "application/pdf" })
@@ -97,11 +104,11 @@ async function splitPDF(files: any[], options: any) {
         downloadUrl,
       }
     } else {
-      // Create ZIP with split PDFs
+      // Multiple files - create ZIP
       const JSZip = (await import("jszip")).default
       const zip = new JSZip()
       
-      if (options.extractMode === "pages" && options.selectedPages) {
+      if (processOptions.extractMode === "pages" && options.selectedPages) {
         splitResults.forEach((pdfBytes, index) => {
           const pageNum = options.selectedPages[index]?.split('-').pop()
           const filename = `${file.name.replace(".pdf", "")}_page_${pageNum || index + 1}.pdf`

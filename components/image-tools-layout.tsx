@@ -294,10 +294,12 @@ export function ImageToolsLayout({
     }
 
     if (processedFiles.length === 1) {
+      // Single file - direct download
       downloadFile(processedFiles[0])
       return
     }
 
+    // Multiple files - create ZIP
     try {
       const JSZip = (await import("jszip")).default
       const zip = new JSZip()
@@ -318,7 +320,7 @@ export function ImageToolsLayout({
       
       toast({
         title: "Download started",
-        description: "ZIP file with all processed images downloaded"
+        description: `ZIP file with ${processedFiles.length} processed images downloaded`
       })
     } catch (error) {
       toast({
@@ -355,9 +357,9 @@ export function ImageToolsLayout({
           </SheetTitle>
         </SheetHeader>
         
-        <ScrollArea className="h-full">
-          <div className="p-6 space-y-6">
-            {/* Presets */}
+        <div className="h-full overflow-auto">
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-full">
             {presets.length > 0 && (
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Presets</Label>
@@ -490,7 +492,7 @@ export function ImageToolsLayout({
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
         
         {/* Mobile Footer */}
         <div className="p-4 border-t bg-white space-y-3">
@@ -895,12 +897,15 @@ export function ImageToolsLayout({
                 )}
 
                 {/* Tool Options */}
-                {Object.entries(optionsBySection).map(([section, sectionOptions]) => (
+                  <div className="aspect-square bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow max-w-full">
                   <div key={section} className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <div className="h-px bg-gray-200 flex-1"></div>
-                      <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{section}</Label>
-                      <div className="h-px bg-gray-200 flex-1"></div>
+                      className="w-full h-full object-contain transition-transform duration-200"
+                      style={{ 
+                        transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
+                        transformOrigin: 'center center'
+                      }}
                     </div>
                     
                     {sectionOptions.map((option) => {

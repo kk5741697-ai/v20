@@ -61,7 +61,7 @@ async function compressPDF(files: any[], options: any) {
         downloadUrl,
       }
     } else {
-      // Multiple files - create ZIP
+      // Multiple files - always create ZIP
       const JSZip = (await import("jszip")).default
       const zip = new JSZip()
 

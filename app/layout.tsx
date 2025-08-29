@@ -59,7 +59,6 @@ export default function RootLayout({
               async
               src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${APP_CONFIG.adsensePublisherId}`}
               crossOrigin="anonymous"
-              strategy="afterInteractive"
             />
           </>
         )}
@@ -183,7 +182,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${poppins.variable} antialiased`}>
+      <body className={`${inter.variable} ${poppins.variable} antialiased`} suppressHydrationWarning>
         {children}
         <AdSenseAutoAds />
         <Toaster />

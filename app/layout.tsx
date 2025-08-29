@@ -58,6 +58,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="google-adsense-account" content="ca-pub-4755003409431265" />
+        <meta name="google-site-verification" content="your-verification-code-here" />
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4755003409431265"
@@ -80,13 +81,27 @@ export default function RootLayout({
         
         <Script id="adsense-init" strategy="afterInteractive">
           {`
-            window.addEventListener('load', function() {
-              try {
-                (window.adsbygoogle = window.adsbygoogle || []).push({});
-              } catch (e) {
-                console.warn('AdSense initialization failed:', e);
+            (function() {
+              function initAdsense() {
+                try {
+                  (window.adsbygoogle = window.adsbygoogle || []).push({
+                    google_ad_client: "ca-pub-4755003409431265",
+                    enable_page_level_ads: true,
+                    overlays: {
+                      bottom: true
+                    }
+                  });
+                } catch (e) {
+                  console.warn('AdSense initialization failed:', e);
+                }
               }
-            });
+              
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initAdsense);
+              } else {
+                initAdsense();
+              }
+            })();
           `}
         </Script>
       </body>

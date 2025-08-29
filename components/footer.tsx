@@ -41,9 +41,10 @@ export function Footer() {
         {/* Ad Banner in Footer */}
         <div className="mb-8">
           <AdBanner 
-            adSlot="footer-banner"
+            adSlot="1234567890"
             adFormat="horizontal"
             className="max-w-4xl mx-auto"
+            mobileOptimized={true}
           />
         </div>
         

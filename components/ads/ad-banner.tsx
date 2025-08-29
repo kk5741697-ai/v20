@@ -66,7 +66,7 @@ export function AdBanner({
         <div>
           <div className="text-gray-700 font-medium mb-1">AdSense Ad Space</div>
           <div className="text-xs text-gray-500">Slot: {adSlot}</div>
-          <div className="text-xs text-gray-400 mt-1">Will show ads after approval</div>
+          <div className="text-xs text-gray-400 mt-1">Publisher: ca-pub-4755003409431265</div>
         </div>
       </div>
     )
@@ -87,11 +87,12 @@ export function AdBanner({
           width: "100%",
           ...style
         }}
-        data-ad-client={APP_CONFIG.adsensePublisherId}
+        data-ad-client="ca-pub-4755003409431265"
         data-ad-slot={adSlot}
         data-ad-format={mobileOptimized && isMobile ? "fluid" : adFormat}
         data-full-width-responsive={fullWidthResponsive.toString()}
         data-ad-channel={isMobile ? "mobile" : "desktop"}
+        data-adtest="on"
       />
     </div>
   )

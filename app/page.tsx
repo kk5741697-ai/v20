@@ -234,9 +234,10 @@ export default function HomePage() {
           {/* Ad Banner in Features Section */}
           <div className="mb-12 text-center">
             <AdBanner 
-              adSlot="homepage-features"
+              adSlot="1234567890"
               adFormat="auto"
               className="max-w-3xl mx-auto"
+              mobileOptimized={true}
             />
           </div>
           

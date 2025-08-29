@@ -4,7 +4,7 @@ import { Inter, Poppins } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { APP_CONFIG } from "@/lib/config"
-import { AdSenseAutoAds } from "@/components/ads/adsense-auto-ads"
+import Script from "next/script"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -50,142 +50,40 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        {APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId && (
-          <>
-            <meta name="google-adsense-account" content={APP_CONFIG.adsensePublisherId} />
-            <script
-              async
-              src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${APP_CONFIG.adsensePublisherId}`}
-              crossOrigin="anonymous"
-            />
-          </>
-        )}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // AdSense SPA compatibility
-              window.addEventListener('load', function() {
-                if (typeof window.adsbygoogle !== 'undefined') {
-                  // Refresh ads on route changes for SPA
-                  const observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                      if (mutation.type === 'childList') {
-                        const newAds = document.querySelectorAll('.adsbygoogle:not([data-adsbygoogle-status])');
-                        newAds.forEach(function() {
-                          try {
-                            (window.adsbygoogle = window.adsbygoogle || []).push({});
-                          } catch (e) {
-                            console.warn('AdSense push failed:', e);
-                          }
-                        });
-                      }
-                    });
-                  });
-                  
-                  observer.observe(document.body, {
-                    childList: true,
-                    subtree: true
-                  });
-                }
-              });
-              
-              // Enhanced AdSense optimization for tools
-              window.addEventListener('DOMContentLoaded', function() {
-                // Track tool usage for better ad targeting
-                const toolName = document.querySelector('h1')?.textContent;
-                if (toolName && typeof gtag !== 'undefined') {
-                  gtag('event', 'tool_view', {
-                    'tool_name': toolName,
-                    'page_title': document.title
-                  });
-                }
-                
-                // Optimize ad refresh for SPA navigation
-                let lastUrl = location.href;
-                new MutationObserver(() => {
-                  const url = location.href;
-                  if (url !== lastUrl) {
-                    lastUrl = url;
-                    setTimeout(() => {
-                      if (typeof window.adsbygoogle !== 'undefined') {
-                        try {
-                          const ads = document.querySelectorAll('.adsbygoogle');
-                          ads.forEach(ad => {
-                            if (!ad.getAttribute('data-adsbygoogle-status')) {
-                              (window.adsbygoogle = window.adsbygoogle || []).push({});
-                            }
-                          });
-                        } catch (e) {
-                          console.warn('AdSense refresh failed:', e);
-                        }
-                      }
-                    }, 1000);
-                  }
-                }).observe(document, { subtree: true, childList: true });
-                
-                // Enhanced mobile ad optimization
-                const isMobile = window.innerWidth < 768;
-                if (isMobile) {
-                  // Track mobile usage for better ad targeting
-                  if (typeof gtag !== 'undefined') {
-                    gtag('event', 'mobile_tool_usage', {
-                      'device_type': 'mobile',
-                      'screen_width': window.innerWidth,
-                      'tool_name': toolName
-                    });
-                  }
-                  
-                  // Optimize mobile ad loading
-                  const mobileAds = document.querySelectorAll('.adsbygoogle[data-ad-channel="mobile"]');
-                  mobileAds.forEach(ad => {
-                    ad.setAttribute('data-ad-format', 'fluid');
-                    ad.setAttribute('data-full-width-responsive', 'true');
-                  });
-                }
-                
-                // Enhanced viewability tracking for better ad performance
-                const observeAdViewability = () => {
-                  const ads = document.querySelectorAll('.adsbygoogle');
-                  const observer = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                      if (entry.isIntersecting && typeof gtag !== 'undefined') {
-                        const adSlot = entry.target.getAttribute('data-ad-slot');
-                        gtag('event', 'ad_impression', {
-                          'ad_slot': adSlot,
-                          'visibility_ratio': entry.intersectionRatio,
-                          'device_type': isMobile ? 'mobile' : 'desktop'
-                        });
-                      }
-                    });
-                  }, { threshold: [0.5, 1.0] });
-                  
-                  ads.forEach(ad => observer.observe(ad));
-                };
-                
-                // Start observing after a short delay
-                setTimeout(observeAdViewability, 2000);
-              });
-            `
-          }}
+        <meta name="google-adsense-account" content="ca-pub-4755003409431265" />
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4755003409431265"
+          crossOrigin="anonymous"
+          strategy="beforeInteractive"
         />
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-CMZ40J80GE"></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-CMZ40J80GE');
-            `
-          }}
-        />
+        <Script async src="https://www.googletagmanager.com/gtag/js?id=G-CMZ40J80GE" />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-CMZ40J80GE');
+          `}
+        </Script>
       </head>
       <body className={`${inter.variable} ${poppins.variable} antialiased`} suppressHydrationWarning>
         {children}
-        <AdSenseAutoAds />
         <Toaster />
+        
+        <Script id="adsense-init" strategy="afterInteractive">
+          {`
+            window.addEventListener('load', function() {
+              try {
+                (window.adsbygoogle = window.adsbygoogle || []).push({});
+              } catch (e) {
+                console.warn('AdSense initialization failed:', e);
+              }
+            });
+          `}
+        </Script>
       </body>
     </html>
   )

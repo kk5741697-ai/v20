@@ -21,7 +21,7 @@ export interface ImageProcessingOptions {
   smoothing?: number
   featherEdges?: boolean
   preserveDetails?: boolean
-  scaleFactor?: string
+  scaleFactor?: string | number
   algorithm?: string
   enhanceDetails?: boolean
   reduceNoise?: boolean
@@ -45,7 +45,7 @@ export class ImageProcessor {
   static async resizeImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -116,10 +116,18 @@ export class ImageProcessor {
             const filters = []
             const { brightness, contrast, saturation, blur, sepia, grayscale } = options.filters
 
-            if (brightness !== undefined && brightness !== 100) filters.push(`brightness(${brightness}%)`)
-            if (contrast !== undefined && contrast !== 100) filters.push(`contrast(${contrast}%)`)
-            if (saturation !== undefined && saturation !== 100) filters.push(`saturate(${saturation}%)`)
-            if (blur !== undefined && blur > 0) filters.push(`blur(${blur}px)`)
+            if (brightness !== undefined && brightness !== 100) {
+              filters.push(`brightness(${Math.max(0, Math.min(300, brightness))}%)`)
+            }
+            if (contrast !== undefined && contrast !== 100) {
+              filters.push(`contrast(${Math.max(0, Math.min(300, contrast))}%)`)
+            }
+            if (saturation !== undefined && saturation !== 100) {
+              filters.push(`saturate(${Math.max(0, Math.min(300, saturation))}%)`)
+            }
+            if (blur !== undefined && blur > 0) {
+              filters.push(`blur(${Math.max(0, Math.min(50, blur))}px)`)
+            }
             if (sepia) filters.push("sepia(100%)")
             if (grayscale) filters.push("grayscale(100%)")
 
@@ -155,6 +163,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }
@@ -162,7 +171,7 @@ export class ImageProcessor {
   static async compressImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -262,7 +271,7 @@ export class ImageProcessor {
   static async cropImage(file: File, cropArea: any, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -363,7 +372,7 @@ export class ImageProcessor {
   static async rotateImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -423,6 +432,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }
@@ -430,7 +440,7 @@ export class ImageProcessor {
   static async addWatermark(file: File, watermarkText: string, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx || !watermarkText) {
         reject(new Error("Canvas not supported or watermark text not specified"))
         return
@@ -527,6 +537,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }
@@ -534,7 +545,7 @@ export class ImageProcessor {
   static async removeBackground(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -565,7 +576,7 @@ export class ImageProcessor {
           })
 
           // Find most common background color
-          const bgColor = bgColors[0] // Simplified - use corner color
+          const bgColor = this.findDominantBackgroundColor(bgColors)
 
           // Enhanced sensitivity and smoothing with proper ranges
           const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
@@ -622,8 +633,35 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
+  }
+
+  private static findDominantBackgroundColor(colors: number[][]): number[] {
+    // Simple clustering to find most common background color
+    const colorCounts = new Map<string, { color: number[], count: number }>()
+    
+    colors.forEach(color => {
+      const key = `${Math.floor(color[0] / 20)}-${Math.floor(color[1] / 20)}-${Math.floor(color[2] / 20)}`
+      if (colorCounts.has(key)) {
+        colorCounts.get(key)!.count++
+      } else {
+        colorCounts.set(key, { color, count: 1 })
+      }
+    })
+    
+    let maxCount = 0
+    let dominantColor = colors[0]
+    
+    colorCounts.forEach(({ color, count }) => {
+      if (count > maxCount) {
+        maxCount = count
+        dominantColor = color
+      }
+    })
+    
+    return dominantColor
   }
 
   private static applyEdgeSmoothing(data: Uint8ClampedArray, width: number, height: number, intensity: number): void {
@@ -663,7 +701,7 @@ export class ImageProcessor {
   static async convertFormat(file: File, outputFormat: "jpeg" | "png" | "webp", options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx) {
         reject(new Error("Canvas not supported"))
         return
@@ -734,10 +772,18 @@ export class ImageProcessor {
             const filters = []
             const { brightness, contrast, saturation, blur, sepia, grayscale } = options.filters
 
-            if (brightness !== undefined && brightness !== 100) filters.push(`brightness(${brightness}%)`)
-            if (contrast !== undefined && contrast !== 100) filters.push(`contrast(${contrast}%)`)
-            if (saturation !== undefined && saturation !== 100) filters.push(`saturate(${saturation}%)`)
-            if (blur !== undefined && blur > 0) filters.push(`blur(${blur}px)`)
+            if (brightness !== undefined && brightness !== 100) {
+              filters.push(`brightness(${Math.max(0, Math.min(300, brightness))}%)`)
+            }
+            if (contrast !== undefined && contrast !== 100) {
+              filters.push(`contrast(${Math.max(0, Math.min(300, contrast))}%)`)
+            }
+            if (saturation !== undefined && saturation !== 100) {
+              filters.push(`saturate(${Math.max(0, Math.min(300, saturation))}%)`)
+            }
+            if (blur !== undefined && blur > 0) {
+              filters.push(`blur(${Math.max(0, Math.min(50, blur))}px)`)
+            }
             if (sepia) filters.push("sepia(100%)")
             if (grayscale) filters.push("grayscale(100%)")
 
@@ -773,6 +819,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }
@@ -780,7 +827,7 @@ export class ImageProcessor {
   static async applyFilters(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext("2d", { alpha: true })
       if (!ctx || !options.filters) {
         reject(new Error("Canvas not supported or no filters specified"))
         return
@@ -841,6 +888,7 @@ export class ImageProcessor {
       }
 
       img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
     })
   }

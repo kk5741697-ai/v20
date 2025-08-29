@@ -55,6 +55,7 @@ const splitOptions = [
     section: "Options",
   },
 ]
+
 async function splitPDF(files: any[], options: any) {
   try {
     if (files.length !== 1) {
@@ -121,7 +122,11 @@ async function splitPDF(files: any[], options: any) {
         })
       }
 
-      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const zipBlob = await zip.generateAsync({ 
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+      })
       const downloadUrl = URL.createObjectURL(zipBlob)
 
       return {

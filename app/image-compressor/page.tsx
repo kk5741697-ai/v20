@@ -40,10 +40,24 @@ const compressionOptions = [
     ],
     section: "Output",
   },
+  {
+    key: "backgroundColor",
+    label: "Background Color",
+    type: "color" as const,
+    defaultValue: "#ffffff",
+    section: "Style",
+  },
 ]
 
 async function compressImages(files: any[], options: any) {
   try {
+    if (files.length === 0) {
+      return {
+        success: false,
+        error: "No files to process",
+      }
+    }
+
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         const quality = parseFloat(options.quality || 70)
@@ -51,6 +65,7 @@ async function compressImages(files: any[], options: any) {
           quality,
           compressionLevel: options.compressionLevel,
           outputFormat: options.outputFormat,
+          backgroundColor: options.backgroundColor,
         })
 
         const processedUrl = URL.createObjectURL(processedBlob)

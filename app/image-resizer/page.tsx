@@ -64,19 +64,33 @@ const resizeOptions = [
     step: 5,
     section: "Output",
   },
+  {
+    key: "backgroundColor",
+    label: "Background Color",
+    type: "color" as const,
+    defaultValue: "#ffffff",
+    section: "Style",
+  },
 ]
 
 const resizePresets = [
-  { name: "Instagram Post", values: { width: 1080, height: 1080 } },
-  { name: "YouTube Thumbnail", values: { width: 1280, height: 720 } },
-  { name: "Facebook Cover", values: { width: 1200, height: 630 } },
-  { name: "Twitter Header", values: { width: 1500, height: 500 } },
-  { name: "LinkedIn Post", values: { width: 1200, height: 627 } },
+  { name: "Instagram Post", values: { width: 1080, height: 1080, maintainAspectRatio: false } },
+  { name: "YouTube Thumbnail", values: { width: 1280, height: 720, maintainAspectRatio: false } },
+  { name: "Facebook Cover", values: { width: 1200, height: 630, maintainAspectRatio: false } },
+  { name: "Twitter Header", values: { width: 1500, height: 500, maintainAspectRatio: false } },
+  { name: "LinkedIn Post", values: { width: 1200, height: 627, maintainAspectRatio: false } },
   { name: "50% Scale", values: { resizeMode: "percentage", width: 50, height: 50 } },
 ]
 
 async function resizeImages(files: any[], options: any) {
   try {
+    if (files.length === 0) {
+      return {
+        success: false,
+        error: "No files to process",
+      }
+    }
+
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         let targetWidth = options.width
@@ -84,8 +98,10 @@ async function resizeImages(files: any[], options: any) {
         
         // Handle percentage mode
         if (options.resizeMode === "percentage") {
-          targetWidth = Math.round((file.dimensions.width * options.width) / 100)
-          targetHeight = Math.round((file.dimensions.height * options.height) / 100)
+          if (file.dimensions) {
+            targetWidth = Math.round((file.dimensions.width * options.width) / 100)
+            targetHeight = Math.round((file.dimensions.height * options.height) / 100)
+          }
         }
         
         const processedBlob = await ImageProcessor.resizeImage(file.originalFile || file.file, {
@@ -93,7 +109,8 @@ async function resizeImages(files: any[], options: any) {
           height: targetHeight,
           maintainAspectRatio: options.maintainAspectRatio,
           outputFormat: options.outputFormat || "jpeg",
-          quality: options.quality
+          quality: options.quality,
+          backgroundColor: options.backgroundColor
         })
 
         const processedUrl = URL.createObjectURL(processedBlob)

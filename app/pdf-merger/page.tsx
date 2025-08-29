@@ -48,7 +48,7 @@ async function mergePDFs(files: any[], options: any) {
       preserveMetadata: options.preserveMetadata
     })
 
-    // Always single PDF output for merge
+    // Create proper blob and download URL
     const blob = new Blob([mergedPdfBytes], { type: "application/pdf" })
     const downloadUrl = URL.createObjectURL(blob)
 

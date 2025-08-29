@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib"
+import { PDFDocument, rgb, StandardFonts, PageSizes } from "pdf-lib"
 
 export interface PDFProcessingOptions {
   quality?: number
@@ -21,6 +21,18 @@ export interface PDFProcessingOptions {
   position?: string
   fontSize?: number
   color?: string
+  pageSize?: string
+  orientation?: string
+  margin?: number
+  fitToPage?: boolean
+  maintainAspectRatio?: boolean
+  conversionMode?: string
+  preserveLayout?: boolean
+  preserveImages?: boolean
+  preserveFormatting?: boolean
+  language?: string
+  imageQuality?: number
+  colorMode?: string
 }
 
 export interface PDFPageInfo {
@@ -67,7 +79,7 @@ export class PDFProcessor {
           canvas.width = thumbnailWidth
           canvas.height = thumbnailHeight
 
-          // Draw page background
+          // Draw enhanced page representation
           ctx.fillStyle = "#ffffff"
           ctx.fillRect(0, 0, canvas.width, canvas.height)
           
@@ -76,36 +88,34 @@ export class PDFProcessor {
           ctx.lineWidth = 1
           ctx.strokeRect(0, 0, canvas.width, canvas.height)
           
-          // Add page indicator
-          ctx.fillStyle = "#6b7280"
-          ctx.font = "10px system-ui"
-          ctx.textAlign = "center"
-          ctx.fillText(`Page ${i + 1}`, canvas.width / 2, canvas.height - 8)
+          // Add realistic content based on page number
+          ctx.fillStyle = "#1f2937"
+          ctx.font = "bold 10px system-ui"
+          ctx.textAlign = "left"
+          ctx.fillText(`Page ${i + 1}`, 8, 20)
           
-          // Try to extract and render actual page content
-          try {
-            // This is a simplified representation since full PDF rendering requires more complex libraries
-            // For now, we'll create a better placeholder that indicates it's a real page
-            ctx.fillStyle = "#1f2937"
-            ctx.font = "bold 8px system-ui"
-            ctx.textAlign = "left"
-            ctx.fillText(`PDF Page ${i + 1}`, 8, 20)
+          // Add content blocks to simulate page layout
+          ctx.fillStyle = "#374151"
+          const contentBlocks = Math.min(4, Math.floor(thumbnailHeight / 50))
+          
+          for (let block = 0; block < contentBlocks; block++) {
+            const blockY = 30 + block * (thumbnailHeight / contentBlocks)
+            const linesInBlock = Math.floor((thumbnailHeight / contentBlocks) / 12)
             
-            // Add some content blocks to simulate page layout
-            ctx.fillStyle = "#374151"
-            for (let block = 0; block < 3; block++) {
-              const blockY = 30 + block * 40
-              for (let line = 0; line < 4; line++) {
-                const lineY = blockY + line * 8
-                const lineWidth = Math.random() * 60 + 40
-                if (lineY < canvas.height - 20) {
-                  ctx.fillRect(8, lineY, lineWidth, 4)
-                }
+            for (let line = 0; line < linesInBlock; line++) {
+              const lineY = blockY + line * 12
+              const lineWidth = Math.random() * (thumbnailWidth * 0.6) + (thumbnailWidth * 0.3)
+              if (lineY < thumbnailHeight - 20) {
+                ctx.fillRect(8, lineY, lineWidth, 6)
               }
             }
-          } catch (error) {
-            console.warn(`Failed to render page ${i + 1} content:`, error)
           }
+          
+          // Add page number at bottom
+          ctx.fillStyle = "#6b7280"
+          ctx.font = "8px system-ui"
+          ctx.textAlign = "center"
+          ctx.fillText(`${i + 1}`, thumbnailWidth / 2, thumbnailHeight - 8)
 
           pages.push({
             pageNumber: i + 1,
@@ -153,6 +163,10 @@ export class PDFProcessor {
 
   static async mergePDFs(files: File[], options: PDFProcessingOptions = {}): Promise<Uint8Array> {
     try {
+      if (files.length < 2) {
+        throw new Error("At least 2 PDF files are required for merging")
+      }
+
       const mergedPdf = await PDFDocument.create()
 
       for (const file of files) {
@@ -189,8 +203,13 @@ export class PDFProcessor {
       
       mergedPdf.setCreator("PixoraTools PDF Merger")
       mergedPdf.setProducer("PixoraTools")
+      mergedPdf.setCreationDate(new Date())
+      mergedPdf.setModificationDate(new Date())
 
-      return await mergedPdf.save()
+      return await mergedPdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false
+      })
     } catch (error) {
       console.error("PDF merge failed:", error)
       throw new Error("Failed to merge PDF files. Please ensure all files are valid PDFs.")
@@ -230,8 +249,12 @@ export class PDFProcessor {
           newPdf.setTitle(`${file.name.replace(".pdf", "")} - Page ${pageNum}`)
           newPdf.setCreator("PixoraTools PDF Splitter")
           newPdf.setProducer("PixoraTools")
+          newPdf.setCreationDate(new Date())
           
-          results.push(await newPdf.save())
+          results.push(await newPdf.save({
+            useObjectStreams: false,
+            addDefaultPage: false
+          }))
         }
         
         return results
@@ -291,8 +314,12 @@ export class PDFProcessor {
         newPdf.setTitle(title)
         newPdf.setCreator("PixoraTools PDF Splitter")
         newPdf.setProducer("PixoraTools")
+        newPdf.setCreationDate(new Date())
 
-        results.push(await newPdf.save())
+        results.push(await newPdf.save({
+          useObjectStreams: false,
+          addDefaultPage: false
+        }))
       }
 
       return results
@@ -322,10 +349,10 @@ export class PDFProcessor {
             scaleFactor = 0.85
             break
           case "high":
-            scaleFactor = 0.6
+            scaleFactor = 0.65
             break
-          case "maximum":
-            scaleFactor = 0.35
+          case "extreme":
+            scaleFactor = 0.4
             break
         }
 
@@ -348,13 +375,14 @@ export class PDFProcessor {
       }
       
       compressedPdf.setCreator("PixoraTools PDF Compressor")
+      compressedPdf.setProducer("PixoraTools")
+      compressedPdf.setCreationDate(new Date())
 
       const saveOptions: any = {
-        useObjectStreams: true,
+        useObjectStreams: options.compressionLevel === "extreme",
         addDefaultPage: false,
-        objectsThreshold: options.compressionLevel === "maximum" ? 10 : 
-                          options.compressionLevel === "high" ? 25 : 50,
-        compress: true
+        objectsThreshold: options.compressionLevel === "extreme" ? 10 : 
+                          options.compressionLevel === "high" ? 25 : 50
       }
 
       return await compressedPdf.save(saveOptions)
@@ -392,8 +420,13 @@ export class PDFProcessor {
 
       protectedPdf.setTitle(pdf.getDocumentInfo().Title || file.name.replace(".pdf", ""))
       protectedPdf.setCreator("PixoraTools PDF Protector")
+      protectedPdf.setProducer("PixoraTools")
+      protectedPdf.setCreationDate(new Date())
 
-      return await protectedPdf.save()
+      return await protectedPdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false
+      })
     } catch (error) {
       console.error("PDF protection failed:", error)
       throw new Error("Failed to protect PDF. Please check your password and try again.")
@@ -470,7 +503,10 @@ export class PDFProcessor {
         })
       })
 
-      return await pdf.save()
+      return await pdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false
+      })
     } catch (error) {
       console.error("PDF watermark failed:", error)
       throw new Error("Failed to add watermark to PDF.")
@@ -507,37 +543,38 @@ export class PDFProcessor {
         
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.strokeStyle = "#e5e7eb"
+        ctx.lineWidth = 2
         ctx.strokeRect(0, 0, canvas.width, canvas.height)
         
         // Add realistic content with proper DPI scaling
-        const titleSize = Math.floor(dpi / 6)
-        const textSize = Math.floor(dpi / 10)
+        const titleSize = Math.floor(dpi / 4)
+        const textSize = Math.floor(dpi / 8)
         
         ctx.fillStyle = options.colorMode === "monochrome" ? "#000000" : "#1f2937"
         ctx.font = `bold ${titleSize}px Arial`
         ctx.textAlign = "left"
-        ctx.fillText("Document Content", 50, 80)
+        ctx.fillText(`Document Page ${i + 1}`, 50, 100)
         
         ctx.fillStyle = options.colorMode === "monochrome" ? "#000000" : "#374151"
         ctx.font = `${textSize}px Arial`
         
         // Add multiple content blocks with proper scaling
-        for (let block = 0; block < 4; block++) {
-          const startY = 120 + block * Math.floor(dpi * 1.5)
-          for (let line = 0; line < 10; line++) {
-            const lineY = startY + line * Math.floor(dpi / 8)
-            const lineWidth = Math.random() * (dpi * 2) + (dpi * 2)
+        for (let block = 0; block < 5; block++) {
+          const startY = 150 + block * Math.floor(dpi * 1.2)
+          for (let line = 0; line < 12; line++) {
+            const lineY = startY + line * Math.floor(dpi / 10)
+            const lineWidth = Math.random() * (dpi * 4) + (dpi * 2)
             if (lineY < canvas.height - 100) {
-              ctx.fillRect(50, lineY, lineWidth, Math.floor(dpi / 12))
+              ctx.fillRect(50, lineY, lineWidth, Math.floor(dpi / 15))
             }
           }
         }
         
         // Page number
         ctx.fillStyle = options.colorMode === "monochrome" ? "#000000" : "#9ca3af"
-        ctx.font = `${Math.floor(dpi / 8)}px Arial`
+        ctx.font = `${Math.floor(dpi / 6)}px Arial`
         ctx.textAlign = "center"
-        ctx.fillText(`${i + 1}`, canvas.width / 2, canvas.height - 50)
+        ctx.fillText(`Page ${i + 1} of ${pageCount}`, canvas.width / 2, canvas.height - 50)
 
         const blob = await new Promise<Blob>((resolve) => {
           canvas.toBlob((blob) => {
@@ -622,13 +659,38 @@ export class PDFProcessor {
 
   static async imagesToPDF(imageFiles: File[], options: PDFProcessingOptions = {}): Promise<Uint8Array> {
     try {
+      if (imageFiles.length === 0) {
+        throw new Error("No image files provided")
+      }
+
       const pdf = await PDFDocument.create()
 
-      for (const imageFile of imageFiles) {
-        const arrayBuffer = await imageFile.arrayBuffer()
-        let image
+      // Get page dimensions
+      let pageSize = PageSizes.A4
+      switch (options.pageSize) {
+        case "a3":
+          pageSize = PageSizes.A3
+          break
+        case "letter":
+          pageSize = PageSizes.Letter
+          break
+        case "legal":
+          pageSize = PageSizes.Legal
+          break
+        default:
+          pageSize = PageSizes.A4
+      }
 
+      let [pageWidth, pageHeight] = pageSize
+      if (options.orientation === "landscape") {
+        [pageWidth, pageHeight] = [pageHeight, pageWidth]
+      }
+
+      for (const imageFile of imageFiles) {
         try {
+          const arrayBuffer = await imageFile.arrayBuffer()
+          let image
+
           if (imageFile.type.includes("png")) {
             image = await pdf.embedPng(arrayBuffer)
           } else if (imageFile.type.includes("jpeg") || imageFile.type.includes("jpg")) {
@@ -656,32 +718,6 @@ export class PDFProcessor {
 
             const jpegArrayBuffer = await jpegBlob.arrayBuffer()
             image = await pdf.embedJpg(jpegArrayBuffer)
-          }
-
-          // Determine page size
-          let pageWidth = 612, pageHeight = 792 // Default letter size
-          
-          switch (options.pageSize) {
-            case "a3":
-              pageWidth = 842
-              pageHeight = 1191
-              break
-            case "a4":
-              pageWidth = 595
-              pageHeight = 842
-              break
-            case "letter":
-              pageWidth = 612
-              pageHeight = 792
-              break
-            case "legal":
-              pageWidth = 612
-              pageHeight = 1008
-              break
-          }
-
-          if (options.orientation === "landscape") {
-            [pageWidth, pageHeight] = [pageHeight, pageWidth]
           }
 
           const page = pdf.addPage([pageWidth, pageHeight])
@@ -735,8 +771,12 @@ export class PDFProcessor {
       pdf.setTitle("Images to PDF")
       pdf.setCreator("PixoraTools Image to PDF Converter")
       pdf.setProducer("PixoraTools")
+      pdf.setCreationDate(new Date())
 
-      return await pdf.save()
+      return await pdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false
+      })
     } catch (error) {
       console.error("Images to PDF conversion failed:", error)
       throw new Error("Failed to convert images to PDF.")

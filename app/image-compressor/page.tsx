@@ -1,36 +1,100 @@
-'use client';
+"use client"
 
-import { ImageToolsLayout } from '@/components/image-tools-layout';
-import { ImageProcessor } from '@/lib/processors/image-processor';
+import { ImageToolsLayout } from "@/components/image-tools-layout"
+import { Archive } from "lucide-react"
+import { ImageProcessor } from "@/lib/processors/image-processor"
 
 const compressionOptions = [
-  { value: '0.9', label: 'High Quality (90%)' },
-  { value: '0.7', label: 'Medium Quality (70%)' },
-  { value: '0.5', label: 'Low Quality (50%)' },
-  { value: '0.3', label: 'Very Low Quality (30%)' }
-];
+  {
+    key: "quality",
+    label: "Quality",
+    type: "slider" as const,
+    defaultValue: 70,
+    min: 10,
+    max: 100,
+    step: 5,
+    section: "Compression",
+  },
+  {
+    key: "compressionLevel",
+    label: "Compression Level",
+    type: "select" as const,
+    defaultValue: "medium",
+    selectOptions: [
+      { value: "low", label: "Low Compression (High Quality)" },
+      { value: "medium", label: "Medium Compression (Balanced)" },
+      { value: "high", label: "High Compression (Small Size)" },
+      { value: "maximum", label: "Maximum Compression (Smallest)" },
+    ],
+    section: "Compression",
+  },
+  {
+    key: "outputFormat",
+    label: "Output Format",
+    type: "select" as const,
+    defaultValue: "jpeg",
+    selectOptions: [
+      { value: "jpeg", label: "JPEG" },
+      { value: "png", label: "PNG" },
+      { value: "webp", label: "WebP" },
+    ],
+    section: "Output",
+  },
+]
+
+async function compressImages(files: any[], options: any) {
+  try {
+    const processedFiles = await Promise.all(
+      files.map(async (file) => {
+        const quality = parseFloat(options.quality || 70)
+        const processedBlob = await ImageProcessor.compressImage(file.originalFile || file.file, {
+          quality,
+          compressionLevel: options.compressionLevel,
+          outputFormat: options.outputFormat,
+        })
+
+        const processedUrl = URL.createObjectURL(processedBlob)
+        
+        const outputFormat = options.outputFormat || "jpeg"
+        const baseName = file.name.split(".")[0]
+        const newName = `${baseName}_compressed.${outputFormat}`
+
+        return {
+          ...file,
+          processed: true,
+          processedPreview: processedUrl,
+          name: newName,
+          processedSize: processedBlob.size,
+          blob: processedBlob
+        }
+      })
+    )
+
+    return {
+      success: true,
+      processedFiles,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to compress images",
+    }
+  }
+}
 
 export default function ImageCompressorPage() {
-  const processImage = async (fiimport { Download, Upload, Compass as Compress } from 'lucide-react'ality = parseFloat(options.quality || '0.7');
-    return await ImageProcessor.compressImage(file, quality);
-  };
-
   return (
     <ImageToolsLayout
       title="Image Compressor"
-      description="Reduce image file size while maintaining quality"
-      acceptedTypes={['image/jpeg', 'image/png', 'image/webp']}
-      processImage={processImage}
-      options={[
-        {
-          key: 'quality',
-          label: 'Compression Quality',
-          type: 'select',
-          options: compressionOptions,
-          defaultValue: '0.7'
-        }
-      ]}
-      outputFormat="same"
+      description="Reduce image file size while maintaining quality. Perfect for web optimization and storage."
+      icon={Archive}
+      toolType="compress"
+      processFunction={compressImages}
+      options={compressionOptions}
+      maxFiles={15}
+      allowBatchProcessing={true}
+      supportedFormats={["image/jpeg", "image/png", "image/webp"]}
+      outputFormats={["jpeg", "png", "webp"]}
     />
-  );
+  )
 }

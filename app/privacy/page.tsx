@@ -2,7 +2,7 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Shield, Eye, Lock, Database, Globe, UserCheck } from "lucide-react"
+import { Shield, Eye, Lock, Database, Globe, UserCheck, Mail, MapPin } from "lucide-react"
 
 const privacyPrinciples = [
   {

@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Book,
   Video,
-  MessageSquare
+  MessageSquare,
+  Users
 } from "lucide-react"
 import Link from "next/link"
 

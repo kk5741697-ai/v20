@@ -24,7 +24,12 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Info
+  Info,
+  Grid,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -95,6 +100,10 @@ export function PDFToolsLayout({
   const [pageRanges, setPageRanges] = useState<Array<{ from: number; to: number }>>([{ from: 1, to: 1 }])
   const [mergeRanges, setMergeRanges] = useState(false)
   const [showPageNumbers, setShowPageNumbers] = useState(true)
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [zoomLevel, setZoomLevel] = useState(100)
+  const [selectedFileForPreview, setSelectedFileForPreview] = useState<string | null>(null)
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -112,6 +121,44 @@ export function PDFToolsLayout({
       setPageRanges([{ from: 1, to: Math.min(totalPages, 5) }])
     }
   }, [files])
+
+  // Touch event handlers for mobile support
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      setTouchStart({ x: touch.clientX, y: touch.clientY })
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart || e.touches.length !== 1) return
+    
+    const touch = e.touches[0]
+    const deltaX = touch.clientX - touchStart.x
+    const deltaY = touch.clientY - touchStart.y
+    
+    // Handle swipe gestures for page navigation
+    if (Math.abs(deltaX) > 50) {
+      if (deltaX > 0) {
+        // Swipe right - previous page
+        const currentIndex = files.findIndex(f => f.id === selectedFileForPreview)
+        if (currentIndex > 0) {
+          setSelectedFileForPreview(files[currentIndex - 1].id)
+        }
+      } else {
+        // Swipe left - next page
+        const currentIndex = files.findIndex(f => f.id === selectedFileForPreview)
+        if (currentIndex < files.length - 1) {
+          setSelectedFileForPreview(files[currentIndex + 1].id)
+        }
+      }
+      setTouchStart(null)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setTouchStart(null)
+  }
 
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles) return
@@ -169,6 +216,9 @@ export function PDFToolsLayout({
     }
 
     setFiles(prev => [...prev, ...newFiles])
+    if (newFiles.length > 0) {
+      setSelectedFileForPreview(newFiles[0].id)
+    }
     
     toast({
       title: "PDFs uploaded",
@@ -187,6 +237,10 @@ export function PDFToolsLayout({
 
   const removeFile = (fileId: string) => {
     setFiles(prev => prev.filter(f => f.id !== fileId))
+    if (selectedFileForPreview === fileId) {
+      const remainingFiles = files.filter(f => f.id !== fileId)
+      setSelectedFileForPreview(remainingFiles.length > 0 ? remainingFiles[0].id : null)
+    }
   }
 
   const resetTool = () => {
@@ -194,6 +248,8 @@ export function PDFToolsLayout({
     setDownloadUrl(null)
     setSelectedPages(new Set())
     setExtractMode("all")
+    setSelectedFileForPreview(null)
+    setZoomLevel(100)
     
     const defaultOptions: Record<string, any> = {}
     options.forEach(option => {
@@ -354,7 +410,7 @@ export function PDFToolsLayout({
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-gray-50">
-      {/* Left Canvas - Fixed PDF Preview */}
+      {/* Left Canvas - Enhanced with touch support */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
@@ -376,6 +432,24 @@ export function PDFToolsLayout({
             )}
           </div>
           <div className="flex items-center space-x-2">
+            {files.length > 0 && (
+              <div className="flex items-center border rounded-md">
+                <Button 
+                  variant={viewMode === "grid" ? "default" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setViewMode("grid")}
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === "list" ? "default" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setViewMode("list")}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <Button 
               variant="outline" 
               size="sm" 
@@ -390,10 +464,24 @@ export function PDFToolsLayout({
             >
               Add More
             </Button>
+            {selectedFileForPreview && (
+              <div className="flex items-center space-x-1 border rounded-md">
+                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-sm px-2">{zoomLevel}%</span>
+                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.min(200, prev + 25))}>
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(100)}>
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Canvas Content */}
+        {/* Canvas Content - Enhanced with better layouts */}
         <div className="flex-1 overflow-hidden">
           {files.length === 0 ? (
             <div className="h-full flex flex-col">
@@ -429,122 +517,201 @@ export function PDFToolsLayout({
             <div className="h-full flex flex-col">
               <ScrollArea className="flex-1">
                 <div className="p-6">
-                  <div className="space-y-8">
-                    {files.map((file, fileIndex) => (
-                      <div key={file.id} className="bg-white rounded-lg shadow-sm border">
-                        {/* File Header */}
-                        <div className="px-6 py-4 border-b bg-gray-50 rounded-t-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
+                  {/* Enhanced view modes */}
+                  {viewMode === "list" ? (
+                    <div className="space-y-6">
+                      {files.map((file, fileIndex) => (
+                        <div key={file.id} className="bg-white rounded-lg shadow-sm border">
+                          <div className="px-6 py-4 border-b bg-gray-50 rounded-t-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <FileText className="h-5 w-5 text-red-600" />
+                                <div>
+                                  <h3 className="font-medium text-gray-900">{file.name}</h3>
+                                  <p className="text-sm text-gray-500">
+                                    {file.pageCount} pages • {formatFileSize(file.size)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {allowPageSelection && (
+                                  <>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => selectAllPages(file.id)}
+                                    >
+                                      Select All
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => deselectAllPages(file.id)}
+                                    >
+                                      Deselect All
+                                    </Button>
+                                  </>
+                                )}
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => setShowPageNumbers(!showPageNumbers)}
+                                >
+                                  {showPageNumbers ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => removeFile(file.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-6">
+                            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+                              {file.pages.map((page, pageIndex) => (
+                                <div
+                                  key={`${file.id}-${page.pageNumber}`}
+                                  className="relative group cursor-pointer transition-all duration-200"
+                                  onTouchStart={handleTouchStart}
+                                  onTouchMove={handleTouchMove}
+                                  onTouchEnd={handleTouchEnd}
+                                >
+                                  <div 
+                                    className={`relative border-2 rounded-lg overflow-hidden transition-all hover:shadow-md ${
+                                      page.selected 
+                                        ? "border-red-500 bg-red-50 shadow-md ring-2 ring-red-200" 
+                                        : "border-gray-200 hover:border-gray-300"
+                                    }`}
+                                    onClick={() => allowPageSelection && togglePageSelection(file.id, page.pageNumber)}
+                                  >
+                                    {allowPageReorder && (
+                                      <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded p-1 shadow-sm cursor-move">
+                                        <GripVertical className="h-3 w-3 text-gray-600" />
+                                      </div>
+                                    )}
+
+                                    <div className="aspect-[3/4] bg-white relative overflow-hidden">
+                                      <img 
+                                        src={page.thumbnail}
+                                        alt={`Page ${page.pageNumber}`}
+                                        className="w-full h-full object-contain"
+                                        style={{ transform: `scale(${zoomLevel / 100})` }}
+                                      />
+                                      
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
+                                    </div>
+
+                                    {showPageNumbers && (
+                                      <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
+                                        <Badge variant="secondary" className="text-xs bg-white shadow-sm border">
+                                          {page.pageNumber}
+                                        </Badge>
+                                      </div>
+                                    )}
+
+                                    {allowPageSelection && (
+                                      <div className="absolute top-2 right-2">
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-sm ${
+                                          page.selected 
+                                            ? "bg-red-500 border-red-500 scale-110" 
+                                            : "bg-white border-gray-300 hover:border-red-300"
+                                        }`}>
+                                          {page.selected && <CheckCircle className="h-4 w-4 text-white" />}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Grid view for better overview */
+                    <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {files.map((file) => (
+                        <div
+                          key={file.id}
+                          className={`bg-white rounded-lg border transition-all duration-200 cursor-pointer ${
+                            selectedFileForPreview === file.id 
+                              ? "ring-2 ring-red-500 shadow-lg" 
+                              : "hover:shadow-md hover:scale-105"
+                          }`}
+                          onClick={() => setSelectedFileForPreview(file.id)}
+                          onTouchStart={handleTouchStart}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                        >
+                          <div className="p-4">
+                            <div className="flex items-center space-x-3 mb-3">
                               <FileText className="h-5 w-5 text-red-600" />
-                              <div>
-                                <h3 className="font-medium text-gray-900">{file.name}</h3>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium text-gray-900 truncate">{file.name}</h3>
                                 <p className="text-sm text-gray-500">
                                   {file.pageCount} pages • {formatFileSize(file.size)}
                                 </p>
                               </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {allowPageSelection && (
-                                <>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    onClick={() => selectAllPages(file.id)}
-                                  >
-                                    Select All
-                                  </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    onClick={() => deselectAllPages(file.id)}
-                                  >
-                                    Deselect All
-                                  </Button>
-                                </>
-                              )}
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
-                                onClick={() => setShowPageNumbers(!showPageNumbers)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeFile(file.id)
+                                }}
+                                className="w-8 h-8 p-0"
                               >
-                                {showPageNumbers ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => removeFile(file.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
+                                <X className="h-4 w-4" />
                               </Button>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* Fixed Pages Grid with proper selection */}
-                        <div className="p-6">
-                          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
-                            {file.pages.map((page, pageIndex) => (
-                              <div
-                                key={`${file.id}-${page.pageNumber}`}
-                                className="relative group cursor-pointer transition-all duration-200"
-                              >
-                                <div 
-                                  className={`relative border-2 rounded-lg overflow-hidden transition-all hover:shadow-md ${
-                                    page.selected 
-                                      ? "border-red-500 bg-red-50 shadow-md ring-2 ring-red-200" 
-                                      : "border-gray-200 hover:border-gray-300"
+                            
+                            <div className="grid grid-cols-4 gap-2">
+                              {file.pages.slice(0, 8).map((page) => (
+                                <div
+                                  key={page.pageNumber}
+                                  className={`relative aspect-[3/4] border rounded overflow-hidden ${
+                                    page.selected ? "border-red-500 ring-1 ring-red-200" : "border-gray-200"
                                   }`}
-                                  onClick={() => allowPageSelection && togglePageSelection(file.id, page.pageNumber)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (allowPageSelection) {
+                                      togglePageSelection(file.id, page.pageNumber)
+                                    }
+                                  }}
                                 >
-                                  {/* Drag Handle */}
-                                  {allowPageReorder && (
-                                    <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded p-1 shadow-sm cursor-move">
-                                      <GripVertical className="h-3 w-3 text-gray-600" />
-                                    </div>
-                                  )}
-
-                                  {/* Page Thumbnail */}
-                                  <div className="aspect-[3/4] bg-white relative overflow-hidden">
-                                    <img 
-                                      src={page.thumbnail}
-                                      alt={`Page ${page.pageNumber}`}
-                                      className="w-full h-full object-contain"
-                                    />
-                                    
-                                    {/* Page overlay on hover */}
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
-                                  </div>
-
-                                  {/* Page Number */}
+                                  <img
+                                    src={page.thumbnail}
+                                    alt={`Page ${page.pageNumber}`}
+                                    className="w-full h-full object-contain bg-white"
+                                  />
                                   {showPageNumbers && (
-                                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
-                                      <Badge variant="secondary" className="text-xs bg-white shadow-sm border">
-                                        {page.pageNumber}
-                                      </Badge>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs text-center py-0.5">
+                                      {page.pageNumber}
                                     </div>
                                   )}
-
-                                  {/* Selection Indicator */}
-                                  {allowPageSelection && (
-                                    <div className="absolute top-2 right-2">
-                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-sm ${
-                                        page.selected 
-                                          ? "bg-red-500 border-red-500 scale-110" 
-                                          : "bg-white border-gray-300 hover:border-red-300"
-                                      }`}>
-                                        {page.selected && <CheckCircle className="h-4 w-4 text-white" />}
-                                      </div>
+                                  {allowPageSelection && page.selected && (
+                                    <div className="absolute top-1 right-1">
+                                      <CheckCircle className="h-3 w-3 text-red-600 bg-white rounded-full" />
                                     </div>
                                   )}
                                 </div>
-                              </div>
-                            ))}
+                              ))}
+                              {file.pages.length > 8 && (
+                                <div className="aspect-[3/4] border border-gray-200 rounded flex items-center justify-center bg-gray-50">
+                                  <span className="text-xs text-gray-500">+{file.pages.length - 8}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
             </div>
@@ -552,7 +719,7 @@ export function PDFToolsLayout({
         </div>
       </div>
 
-      {/* Right Sidebar - Fixed overflow */}
+      {/* Right Sidebar - Enhanced and always slim */}
       <div className="w-80 bg-white border-l shadow-lg flex flex-col max-h-screen">
         {/* Sidebar Header */}
         <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
@@ -563,7 +730,7 @@ export function PDFToolsLayout({
           <p className="text-sm text-gray-600 mt-1">{description}</p>
         </div>
 
-        {/* Sidebar Content - Fixed scrolling */}
+        {/* Sidebar Content - Enhanced scrolling */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-6 space-y-6">
@@ -571,7 +738,7 @@ export function PDFToolsLayout({
               {toolType === "split" && (
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Extract Mode</Label>
-                  <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
                     <Button
                       variant={extractMode === "range" ? "default" : "outline"}
                       size="sm"
@@ -598,6 +765,15 @@ export function PDFToolsLayout({
                     >
                       <div className="text-lg mb-1">📊</div>
                       <span className="text-xs">Size</span>
+                    </Button>
+                    <Button
+                      variant={extractMode === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setExtractMode("all")}
+                      className="flex flex-col items-center p-3 h-auto"
+                    >
+                      <div className="text-lg mb-1">📋</div>
+                      <span className="text-xs">All</span>
                     </Button>
                   </div>
                   
@@ -626,7 +802,7 @@ export function PDFToolsLayout({
                         </div>
                       </div>
 
-                      {/* Range Inputs */}
+                      {/* Enhanced Range Inputs */}
                       <div className="space-y-3">
                         {pageRanges.map((range, index) => (
                           <div key={index} className="flex items-center space-x-2">
@@ -812,9 +988,8 @@ export function PDFToolsLayout({
             </div>
           </ScrollArea>
 
-          {/* Fixed Sidebar Footer */}
+          {/* Fixed Sidebar Footer - Enhanced */}
           <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
-            {/* Processing Status */}
             {isProcessing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center space-x-2 mb-2">
@@ -826,7 +1001,6 @@ export function PDFToolsLayout({
               </div>
             )}
 
-            {/* Ready Status */}
             {!isProcessing && files.length > 0 && !downloadUrl && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center space-x-2">
@@ -878,6 +1052,7 @@ export function PDFToolsLayout({
               </div>
             )}
 
+            {/* Enhanced Statistics */}
             {files.length > 0 && (
               <div className="text-xs text-gray-500 space-y-1 pt-2 border-t">
                 <div className="flex justify-between">

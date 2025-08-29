@@ -15,20 +15,25 @@ A comprehensive web tools platform with 300+ professional utilities for PDF, ima
 
 ### Ads System
 
-The ads system is **disabled by default**. To enable ads:
+The ads system is **enabled by default** with proper AdSense integration:
 
-1. Copy `.env.example` to `.env.local`
-2. Set your AdSense publisher ID:
-   ```
-   NEXT_PUBLIC_ADSENSE_PUBLISHER_ID=ca-pub-your-publisher-id
-   ```
-3. Update `lib/config.ts` to enable ads:
-   ```typescript
-   export const APP_CONFIG: AppConfig = {
-     enableAds: true, // Change to true
-     // ... other config
-   }
-   ```
+#### AdSense Features:
+- **SPA Compatibility**: Ads work with Next.js client-side navigation
+- **Responsive Design**: Ads adapt to mobile and desktop layouts
+- **Strategic Placement**: Ads in canvas areas, sidebars, and content sections
+- **GDPR Compliant**: Proper consent management and privacy controls
+- **Performance Optimized**: Lazy loading and non-blocking ad initialization
+
+#### Ad Placements:
+- Homepage feature section
+- Tool canvas areas (overlay and bottom)
+- Tool sidebars (desktop)
+- Mobile bottom banners
+- Upload areas (mobile)
+- Footer sections
+
+#### Configuration:
+The AdSense publisher ID is set in `lib/config.ts`. Auto ads are disabled for better control over ad placement and user experience.
 
 ### Search Functionality
 

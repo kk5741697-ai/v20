@@ -231,12 +231,12 @@ export default function HomePage() {
       {/* Features Section */}
       <section className="py-16 px-4 bg-white">
         <div className="max-w-6xl mx-auto">
-          {/* Ad Banner */}
-          <div className="mb-12">
+          {/* Ad Banner in Features Section */}
+          <div className="mb-12 text-center">
             <AdBanner 
-              adSlot="1234567890"
+              adSlot="homepage-features"
               adFormat="auto"
-              className="max-w-4xl mx-auto"
+              className="max-w-3xl mx-auto"
             />
           </div>
           

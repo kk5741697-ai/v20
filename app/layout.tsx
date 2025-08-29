@@ -59,9 +59,41 @@ export default function RootLayout({
               async
               src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${APP_CONFIG.adsensePublisherId}`}
               crossOrigin="anonymous"
+              strategy="afterInteractive"
             />
           </>
         )}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // AdSense SPA compatibility
+              window.addEventListener('load', function() {
+                if (typeof window.adsbygoogle !== 'undefined') {
+                  // Refresh ads on route changes for SPA
+                  const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                      if (mutation.type === 'childList') {
+                        const newAds = document.querySelectorAll('.adsbygoogle:not([data-adsbygoogle-status])');
+                        newAds.forEach(function() {
+                          try {
+                            (window.adsbygoogle = window.adsbygoogle || []).push({});
+                          } catch (e) {
+                            console.warn('AdSense push failed:', e);
+                          }
+                        });
+                      }
+                    });
+                  });
+                  
+                  observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                  });
+                }
+              });
+            `
+          }}
+        />
       </head>
       <body className={`${inter.variable} ${poppins.variable} antialiased`}>
         {children}

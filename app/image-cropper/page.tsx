@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,20 +18,18 @@ import {
   Crop,
   CheckCircle,
   X,
-  ArrowLeft,
   RefreshCw,
   ZoomIn,
   ZoomOut,
   Maximize2,
   Move,
   Square,
-  Circle
+  Circle,
+  RotateCcw
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { ImageProcessor } from "@/lib/processors/image-processor"
-import { Footer } from "@/components/footer"
 import { AdBanner } from "@/components/ads/ad-banner"
-import Link from "next/link"
 
 interface CropArea {
   x: number
@@ -67,21 +67,7 @@ const cropOptions = [
       { value: "5:4", label: "Instagram Portrait (5:4)" },
       { value: "1.91:1", label: "Facebook Cover (1.91:1)" },
     ],
-  },
-  {
-    key: "cropPreset",
-    label: "Social Media Presets",
-    type: "select" as const,
-    defaultValue: "custom",
-    selectOptions: [
-      { value: "custom", label: "Custom Size" },
-      { value: "instagram-post", label: "Instagram Post (1080x1080)" },
-      { value: "instagram-story", label: "Instagram Story (1080x1920)" },
-      { value: "facebook-post", label: "Facebook Post (1200x630)" },
-      { value: "twitter-post", label: "Twitter Post (1200x675)" },
-      { value: "youtube-thumbnail", label: "YouTube Thumbnail (1280x720)" },
-      { value: "linkedin-post", label: "LinkedIn Post (1200x627)" },
-    ],
+    section: "Crop Settings",
   },
   {
     key: "outputFormat",
@@ -93,6 +79,7 @@ const cropOptions = [
       { value: "jpeg", label: "JPEG" },
       { value: "webp", label: "WebP" },
     ],
+    section: "Output",
   },
   {
     key: "quality",
@@ -102,7 +89,24 @@ const cropOptions = [
     min: 10,
     max: 100,
     step: 5,
+    section: "Output",
   },
+  {
+    key: "backgroundColor",
+    label: "Background Color",
+    type: "color" as const,
+    defaultValue: "#ffffff",
+    section: "Output",
+  },
+]
+
+const socialPresets = [
+  { name: "Instagram Post", aspectRatio: "1:1", dimensions: { width: 1080, height: 1080 } },
+  { name: "Instagram Story", aspectRatio: "9:16", dimensions: { width: 1080, height: 1920 } },
+  { name: "YouTube Thumbnail", aspectRatio: "16:9", dimensions: { width: 1280, height: 720 } },
+  { name: "Facebook Cover", aspectRatio: "1.91:1", dimensions: { width: 1200, height: 630 } },
+  { name: "Twitter Header", aspectRatio: "3:1", dimensions: { width: 1500, height: 500 } },
+  { name: "LinkedIn Post", aspectRatio: "1.91:1", dimensions: { width: 1200, height: 627 } },
 ]
 
 export default function ImageCropperPage() {
@@ -112,13 +116,16 @@ export default function ImageCropperPage() {
   const [processedFile, setProcessedFile] = useState<ImageFile | null>(null)
   const [zoomLevel, setZoomLevel] = useState(100)
   const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [isResizing, setIsResizing] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeHandle, setResizeHandle] = useState<string>("")
+  const [imageScale, setImageScale] = useState(1)
+  const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 })
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<HTMLImageElement | null>(null)
 
   useEffect(() => {
     const defaultOptions: Record<string, any> = {}
@@ -129,33 +136,37 @@ export default function ImageCropperPage() {
   }, [])
 
   useEffect(() => {
-    if (file) {
+    if (file && canvasRef.current && containerRef.current) {
+      calculateImageFit()
       drawCanvas()
     }
   }, [file, zoomLevel])
 
   useEffect(() => {
+    if (file) {
+      drawCanvas()
+    }
+  }, [file?.cropArea])
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!file) return
       
-      const step = e.shiftKey ? 10 : 1
+      e.preventDefault()
+      const step = e.shiftKey ? 5 : 1
       let newCropArea = { ...file.cropArea }
       
       switch (e.key) {
         case "ArrowLeft":
-          e.preventDefault()
           newCropArea.x = Math.max(0, newCropArea.x - step)
           break
         case "ArrowRight":
-          e.preventDefault()
           newCropArea.x = Math.min(100 - newCropArea.width, newCropArea.x + step)
           break
         case "ArrowUp":
-          e.preventDefault()
           newCropArea.y = Math.max(0, newCropArea.y - step)
           break
         case "ArrowDown":
-          e.preventDefault()
           newCropArea.y = Math.min(100 - newCropArea.height, newCropArea.y + step)
           break
         default:
@@ -168,6 +179,33 @@ export default function ImageCropperPage() {
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [file])
+
+  const calculateImageFit = () => {
+    if (!file || !containerRef.current) return
+
+    const container = containerRef.current
+    const containerWidth = container.clientWidth
+    const containerHeight = container.clientHeight
+    const imageAspect = file.dimensions.width / file.dimensions.height
+    const containerAspect = containerWidth / containerHeight
+
+    let scale: number
+    let offsetX: number
+    let offsetY: number
+
+    if (imageAspect > containerAspect) {
+      scale = (containerWidth * (zoomLevel / 100)) / file.dimensions.width
+      offsetX = 0
+      offsetY = (containerHeight - file.dimensions.height * scale) / 2
+    } else {
+      scale = (containerHeight * (zoomLevel / 100)) / file.dimensions.height
+      offsetX = (containerWidth - file.dimensions.width * scale) / 2
+      offsetY = 0
+    }
+
+    setImageScale(scale)
+    setImageOffset({ x: offsetX, y: offsetY })
+  }
 
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
@@ -239,49 +277,35 @@ export default function ImageCropperPage() {
     const container = containerRef.current
     
     // Set canvas size to container size
-    const containerRect = container.getBoundingClientRect()
-    canvas.width = containerRect.width
-    canvas.height = containerRect.height
+    canvas.width = container.clientWidth
+    canvas.height = container.clientHeight
 
     const img = new Image()
     img.onload = () => {
-      // Calculate image display size to fit container while maintaining aspect ratio
-      const containerAspect = canvas.width / canvas.height
-      const imageAspect = img.naturalWidth / img.naturalHeight
+      imageRef.current = img
       
-      let displayWidth, displayHeight, offsetX, offsetY
-      
-      if (imageAspect > containerAspect) {
-        displayWidth = canvas.width * (zoomLevel / 100)
-        displayHeight = displayWidth / imageAspect
-        offsetX = (canvas.width - displayWidth) / 2
-        offsetY = (canvas.height - displayHeight) / 2
-      } else {
-        displayHeight = canvas.height * (zoomLevel / 100)
-        displayWidth = displayHeight * imageAspect
-        offsetX = (canvas.width - displayWidth) / 2
-        offsetY = (canvas.height - displayHeight) / 2
-      }
-
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       
       // Draw background
-      ctx.fillStyle = "#f3f4f6"
+      ctx.fillStyle = "#f8fafc"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       
+      // Calculate display dimensions
+      const displayWidth = file.dimensions.width * imageScale
+      const displayHeight = file.dimensions.height * imageScale
+      
       // Draw image
-      ctx.drawImage(img, offsetX, offsetY, displayWidth, displayHeight)
+      ctx.drawImage(img, imageOffset.x, imageOffset.y, displayWidth, displayHeight)
       
       // Draw crop overlay
-      drawCropOverlay(ctx, canvas, displayWidth, displayHeight, offsetX, offsetY)
+      drawCropOverlay(ctx, displayWidth, displayHeight, imageOffset.x, imageOffset.y)
     }
     img.src = file.preview
   }
 
   const drawCropOverlay = (
     ctx: CanvasRenderingContext2D, 
-    canvas: HTMLCanvasElement, 
     imageWidth: number, 
     imageHeight: number, 
     imageX: number, 
@@ -295,51 +319,62 @@ export default function ImageCropperPage() {
     const cropWidth = (file.cropArea.width / 100) * imageWidth
     const cropHeight = (file.cropArea.height / 100) * imageHeight
 
-    // Draw dark overlay
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)"
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Draw dark overlay on entire canvas
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
     
-    // Clear crop area
+    // Clear crop area to show original image
     ctx.clearRect(cropX, cropY, cropWidth, cropHeight)
     
     // Redraw image in crop area only
-    const img = new Image()
-    img.onload = () => {
+    if (imageRef.current) {
       ctx.save()
       ctx.beginPath()
       ctx.rect(cropX, cropY, cropWidth, cropHeight)
       ctx.clip()
-      ctx.drawImage(img, imageX, imageY, imageWidth, imageHeight)
+      ctx.drawImage(imageRef.current, imageX, imageY, imageWidth, imageHeight)
       ctx.restore()
-      
-      // Draw crop border
-      ctx.strokeStyle = "#3b82f6"
-      ctx.lineWidth = 2
-      ctx.strokeRect(cropX, cropY, cropWidth, cropHeight)
-      
-      // Draw resize handles
-      const handleSize = 8
-      const handles = [
-        { x: cropX - handleSize/2, y: cropY - handleSize/2, cursor: "nw-resize", handle: "nw" },
-        { x: cropX + cropWidth/2 - handleSize/2, y: cropY - handleSize/2, cursor: "n-resize", handle: "n" },
-        { x: cropX + cropWidth - handleSize/2, y: cropY - handleSize/2, cursor: "ne-resize", handle: "ne" },
-        { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "e-resize", handle: "e" },
-        { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "se-resize", handle: "se" },
-        { x: cropX + cropWidth/2 - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "s-resize", handle: "s" },
-        { x: cropX - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "sw-resize", handle: "sw" },
-        { x: cropX - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "w-resize", handle: "w" },
-      ]
-      
-      ctx.fillStyle = "#3b82f6"
-      handles.forEach(handle => {
-        ctx.fillRect(handle.x, handle.y, handleSize, handleSize)
-      })
-      
-      // Draw center move handle
-      ctx.fillStyle = "#1d4ed8"
-      ctx.fillRect(cropX + cropWidth/2 - 6, cropY + cropHeight/2 - 6, 12, 12)
     }
-    img.src = file.preview
+    
+    // Draw crop border
+    ctx.strokeStyle = "#3b82f6"
+    ctx.lineWidth = 3
+    ctx.strokeRect(cropX, cropY, cropWidth, cropHeight)
+    
+    // Draw resize handles
+    const handleSize = 12
+    const handles = [
+      { x: cropX - handleSize/2, y: cropY - handleSize/2, cursor: "nw-resize", handle: "nw" },
+      { x: cropX + cropWidth/2 - handleSize/2, y: cropY - handleSize/2, cursor: "n-resize", handle: "n" },
+      { x: cropX + cropWidth - handleSize/2, y: cropY - handleSize/2, cursor: "ne-resize", handle: "ne" },
+      { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "e-resize", handle: "e" },
+      { x: cropX + cropWidth - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "se-resize", handle: "se" },
+      { x: cropX + cropWidth/2 - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "s-resize", handle: "s" },
+      { x: cropX - handleSize/2, y: cropY + cropHeight - handleSize/2, cursor: "sw-resize", handle: "sw" },
+      { x: cropX - handleSize/2, y: cropY + cropHeight/2 - handleSize/2, cursor: "w-resize", handle: "w" },
+    ]
+    
+    // Draw handles
+    ctx.fillStyle = "#3b82f6"
+    ctx.strokeStyle = "#ffffff"
+    ctx.lineWidth = 2
+    handles.forEach(handle => {
+      ctx.fillRect(handle.x, handle.y, handleSize, handleSize)
+      ctx.strokeRect(handle.x, handle.y, handleSize, handleSize)
+    })
+    
+    // Draw center move handle
+    ctx.fillStyle = "#1d4ed8"
+    ctx.strokeStyle = "#ffffff"
+    const centerSize = 16
+    ctx.fillRect(cropX + cropWidth/2 - centerSize/2, cropY + cropHeight/2 - centerSize/2, centerSize, centerSize)
+    ctx.strokeRect(cropX + cropWidth/2 - centerSize/2, cropY + cropHeight/2 - centerSize/2, centerSize, centerSize)
+    
+    // Draw move icon
+    ctx.fillStyle = "#ffffff"
+    ctx.font = "12px Arial"
+    ctx.textAlign = "center"
+    ctx.fillText("✥", cropX + cropWidth/2, cropY + cropHeight/2 + 4)
   }
 
   const updateCropArea = (newCropArea: CropArea) => {
@@ -347,16 +382,19 @@ export default function ImageCropperPage() {
     
     // Apply aspect ratio constraint if set
     if (toolOptions.aspectRatio && toolOptions.aspectRatio !== "free") {
-      const [ratioW, ratioH] = toolOptions.aspectRatio.split(':').map(Number)
-      if (ratioW && ratioH) {
-        const targetRatio = ratioW / ratioH
-        const currentRatio = newCropArea.width / newCropArea.height
-        
-        if (Math.abs(currentRatio - targetRatio) > 0.01) {
-          if (currentRatio > targetRatio) {
-            newCropArea.width = newCropArea.height * targetRatio
-          } else {
-            newCropArea.height = newCropArea.width / targetRatio
+      const aspectParts = toolOptions.aspectRatio.split(':')
+      if (aspectParts.length === 2) {
+        const [ratioW, ratioH] = aspectParts.map(Number)
+        if (ratioW && ratioH) {
+          const targetRatio = ratioW / ratioH
+          const currentRatio = newCropArea.width / newCropArea.height
+          
+          if (Math.abs(currentRatio - targetRatio) > 0.01) {
+            if (currentRatio > targetRatio) {
+              newCropArea.width = newCropArea.height * targetRatio
+            } else {
+              newCropArea.height = newCropArea.width / targetRatio
+            }
           }
         }
       }
@@ -371,40 +409,41 @@ export default function ImageCropperPage() {
     setFile(prev => prev ? { ...prev, cropArea: newCropArea } : null)
   }
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!file || !canvasRef.current || !containerRef.current) return
-    
+  const getMousePosition = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    
     const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
     
-    // Calculate image display coordinates
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const imageAspect = file.dimensions.width / file.dimensions.height
-    const containerAspect = containerRect.width / containerRect.height
-    
-    let displayWidth, displayHeight, offsetX, offsetY
-    
-    if (imageAspect > containerAspect) {
-      displayWidth = canvas.width * (zoomLevel / 100)
-      displayHeight = displayWidth / imageAspect
-      offsetX = (canvas.width - displayWidth) / 2
-      offsetY = (canvas.height - displayHeight) / 2
+    if ('touches' in e) {
+      const touch = e.touches[0] || e.changedTouches[0]
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+      }
     } else {
-      displayHeight = canvas.height * (zoomLevel / 100)
-      displayWidth = displayHeight * imageAspect
-      offsetX = (canvas.width - displayWidth) / 2
-      offsetY = (canvas.height - displayHeight) / 2
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      }
     }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!file || !canvasRef.current) return
     
-    const cropX = offsetX + (file.cropArea.x / 100) * displayWidth
-    const cropY = offsetY + (file.cropArea.y / 100) * displayHeight
+    const { x, y } = getMousePosition(e)
+    
+    const displayWidth = file.dimensions.width * imageScale
+    const displayHeight = file.dimensions.height * imageScale
+    
+    const cropX = imageOffset.x + (file.cropArea.x / 100) * displayWidth
+    const cropY = imageOffset.y + (file.cropArea.y / 100) * displayHeight
     const cropWidth = (file.cropArea.width / 100) * displayWidth
     const cropHeight = (file.cropArea.height / 100) * displayHeight
     
-    // Check if clicking on resize handles
-    const handleSize = 8
+    // Check resize handles first
+    const handleSize = 12
     const handles = [
       { x: cropX - handleSize/2, y: cropY - handleSize/2, handle: "nw" },
       { x: cropX + cropWidth/2 - handleSize/2, y: cropY - handleSize/2, handle: "n" },
@@ -425,6 +464,17 @@ export default function ImageCropperPage() {
       }
     }
     
+    // Check center move handle
+    const centerSize = 16
+    const centerX = cropX + cropWidth/2 - centerSize/2
+    const centerY = cropY + cropHeight/2 - centerSize/2
+    
+    if (x >= centerX && x <= centerX + centerSize && y >= centerY && y <= centerY + centerSize) {
+      setIsDragging(true)
+      setDragStart({ x: x - cropX, y: y - cropY })
+      return
+    }
+    
     // Check if clicking inside crop area for moving
     if (x >= cropX && x <= cropX + cropWidth && y >= cropY && y <= cropY + cropHeight) {
       setIsDragging(true)
@@ -432,36 +482,17 @@ export default function ImageCropperPage() {
     }
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!file || !canvasRef.current || !containerRef.current) return
+  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!file || !canvasRef.current || (!isDragging && !isResizing)) return
     
-    const canvas = canvasRef.current
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = getMousePosition(e)
     
-    // Calculate image display coordinates
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const imageAspect = file.dimensions.width / file.dimensions.height
-    const containerAspect = containerRect.width / containerRect.height
-    
-    let displayWidth, displayHeight, offsetX, offsetY
-    
-    if (imageAspect > containerAspect) {
-      displayWidth = canvas.width * (zoomLevel / 100)
-      displayHeight = displayWidth / imageAspect
-      offsetX = (canvas.width - displayWidth) / 2
-      offsetY = (canvas.height - displayHeight) / 2
-    } else {
-      displayHeight = canvas.height * (zoomLevel / 100)
-      displayWidth = displayHeight * imageAspect
-      offsetX = (canvas.width - displayWidth) / 2
-      offsetY = (canvas.height - displayHeight) / 2
-    }
+    const displayWidth = file.dimensions.width * imageScale
+    const displayHeight = file.dimensions.height * imageScale
     
     if (isDragging) {
-      const newX = ((x - dragStart.x - offsetX) / displayWidth) * 100
-      const newY = ((y - dragStart.y - offsetY) / displayHeight) * 100
+      const newX = ((x - dragStart.x - imageOffset.x) / displayWidth) * 100
+      const newY = ((y - dragStart.y - imageOffset.y) / displayHeight) * 100
       
       updateCropArea({
         ...file.cropArea,
@@ -543,6 +574,37 @@ export default function ImageCropperPage() {
     setToolOptions(defaultOptions)
   }
 
+  const applyPreset = (preset: typeof socialPresets[0]) => {
+    if (!file) return
+    
+    const { width: presetWidth, height: presetHeight } = preset.dimensions
+    const imageAspectRatio = file.dimensions.width / file.dimensions.height
+    const presetAspectRatio = presetWidth / presetHeight
+    
+    let newCropArea: CropArea
+    
+    if (imageAspectRatio > presetAspectRatio) {
+      const newWidth = (presetAspectRatio * file.dimensions.height / file.dimensions.width) * 100
+      newCropArea = {
+        x: (100 - newWidth) / 2,
+        y: 0,
+        width: newWidth,
+        height: 100
+      }
+    } else {
+      const newHeight = (file.dimensions.width / presetAspectRatio / file.dimensions.height) * 100
+      newCropArea = {
+        x: 0,
+        y: (100 - newHeight) / 2,
+        width: 100,
+        height: newHeight
+      }
+    }
+    
+    updateCropArea(newCropArea)
+    setToolOptions(prev => ({ ...prev, aspectRatio: preset.aspectRatio }))
+  }
+
   const handleProcess = async () => {
     if (!file) {
       toast({
@@ -561,7 +623,8 @@ export default function ImageCropperPage() {
         file.cropArea,
         { 
           outputFormat: toolOptions.outputFormat || "png", 
-          quality: toolOptions.quality || 95 
+          quality: toolOptions.quality || 95,
+          backgroundColor: toolOptions.backgroundColor
         }
       )
 
@@ -619,356 +682,333 @@ export default function ImageCropperPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
-  const applyPreset = (preset: string) => {
-    if (!file) return
-    
-    const presetDimensions = getPresetDimensions(preset)
-    if (presetDimensions) {
-      const { width: presetWidth, height: presetHeight } = presetDimensions
-      const imageAspectRatio = file.dimensions.width / file.dimensions.height
-      const presetAspectRatio = presetWidth / presetHeight
-      
-      let newCropArea: CropArea
-      
-      if (imageAspectRatio > presetAspectRatio) {
-        const newWidth = (presetAspectRatio * file.dimensions.height / file.dimensions.width) * 100
-        newCropArea = {
-          x: (100 - newWidth) / 2,
-          y: 0,
-          width: newWidth,
-          height: 100
-        }
-      } else {
-        const newHeight = (file.dimensions.width / presetAspectRatio / file.dimensions.height) * 100
-        newCropArea = {
-          x: 0,
-          y: (100 - newHeight) / 2,
-          width: 100,
-          height: newHeight
-        }
-      }
-      
-      updateCropArea(newCropArea)
-    }
-  }
-
-  const getPresetDimensions = (preset: string) => {
-    const presets: Record<string, { width: number; height: number }> = {
-      "instagram-post": { width: 1080, height: 1080 },
-      "instagram-story": { width: 1080, height: 1920 },
-      "facebook-post": { width: 1200, height: 630 },
-      "twitter-post": { width: 1200, height: 675 },
-      "youtube-thumbnail": { width: 1280, height: 720 },
-      "linkedin-post": { width: 1200, height: 627 }
-    }
-    return presets[preset]
-  }
-
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
-      {/* Left Canvas */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-white border-b px-4 lg:px-6 py-4 flex items-center justify-between shadow-sm">
-          <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div className="flex items-center space-x-2">
-              <Crop className="h-5 w-5 text-cyan-600" />
-              <h1 className="text-lg lg:text-xl font-semibold text-gray-900">Crop Image</h1>
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full overflow-hidden bg-gray-50">
+        {/* Left Canvas */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="bg-white border-b px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center space-x-2 lg:space-x-4">
+              <div className="flex items-center space-x-2">
+                <Crop className="h-5 w-5 text-cyan-600" />
+                <h1 className="text-lg lg:text-xl font-semibold text-gray-900">Crop Image</h1>
+              </div>
+              {file && <Badge variant="secondary" className="hidden sm:inline-flex">Single Mode</Badge>}
             </div>
-            {file && <Badge variant="secondary">Single Mode</Badge>}
+            <div className="flex items-center space-x-1 lg:space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={resetTool}
+                className="h-8 lg:h-9"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              {file && (
+                <div className="flex items-center space-x-1 border rounded-md">
+                  <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
+                    <ZoomOut className="h-3 w-3 lg:h-4 lg:w-4" />
+                  </Button>
+                  <span className="text-xs lg:text-sm px-1 lg:px-2">{zoomLevel}%</span>
+                  <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.min(200, prev + 25))}>
+                    <ZoomIn className="h-3 w-3 lg:h-4 lg:w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setZoomLevel(100)}>
+                    <Maximize2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={resetTool}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            {file && (
-              <div className="hidden lg:flex items-center space-x-1 border rounded-md">
-                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-                <span className="text-sm px-2">{zoomLevel}%</span>
-                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.min(200, prev + 25))}>
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(100)}>
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
+
+          {/* Canvas Content */}
+          <div className="flex-1 overflow-hidden relative" ref={containerRef}>
+            {!file ? (
+              <div className="h-full flex items-center justify-center p-4 lg:p-6">
+                <div 
+                  className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-6 lg:p-16 group"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="relative mb-4 lg:mb-6">
+                    <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
+                    <Upload className="relative h-12 lg:h-20 w-12 lg:w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
+                  </div>
+                  <h3 className="text-lg lg:text-2xl font-semibold mb-2 lg:mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
+                  <p className="text-gray-500 mb-4 lg:mb-6 text-sm lg:text-lg text-center">or click to browse files</p>
+                  <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-4 lg:px-8 py-2 lg:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Choose Image
+                  </Button>
+                  <div className="mt-4 lg:mt-6 space-y-2 text-center">
+                    <p className="text-sm text-gray-500 font-medium">
+                      JPG, PNG, WebP files
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Single image • Up to 100MB
+                    </p>
+                  </div>
+                  
+                  {/* Mobile Ad */}
+                  <div className="lg:hidden mt-6">
+                    <AdBanner 
+                      adSlot="mobile-upload-area"
+                      adFormat="auto"
+                      className="max-w-sm mx-auto"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full w-full relative">
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  onTouchStart={handleMouseDown}
+                  onTouchMove={handleMouseMove}
+                  onTouchEnd={handleMouseUp}
+                />
+                
+                {/* Crop Info Overlay */}
+                <div className="absolute top-2 lg:top-4 left-2 lg:left-4 bg-black/70 text-white text-xs px-2 lg:px-3 py-1 lg:py-2 rounded-lg">
+                  <div className="space-y-1">
+                    <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
+                    <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
+                    <div className="text-gray-300 hidden lg:block">Use arrow keys • Shift+arrows for 5px steps</div>
+                  </div>
+                </div>
+
+                {/* Mobile Instructions */}
+                <div className="lg:hidden absolute bottom-2 left-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded-lg text-center">
+                  Drag to move • Drag corners to resize
+                </div>
+
+                {/* Desktop Ad Overlay */}
+                <div className="hidden lg:block absolute bottom-4 left-4 right-4 pointer-events-none">
+                  <div className="max-w-md mx-auto pointer-events-auto">
+                    <AdBanner 
+                      adSlot="crop-tool-overlay"
+                      adFormat="horizontal"
+                      className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Canvas Content */}
-        <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-          {!file ? (
-            <div className="h-full flex items-center justify-center p-4 lg:p-6">
-              <div 
-                className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-8 lg:p-16 group"
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
-                  <Upload className="relative h-16 lg:h-20 w-16 lg:w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
-                </div>
-                <h3 className="text-xl lg:text-2xl font-semibold mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
-                <p className="text-gray-500 mb-6 text-base lg:text-lg text-center">or click to browse files</p>
-                <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-6 lg:px-8 py-2 lg:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Choose Image
-                </Button>
-                <div className="mt-6 space-y-2 text-center">
-                  <p className="text-sm text-gray-500 font-medium">
-                    JPG, PNG, WebP files
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Single image • Up to 100MB
-                  </p>
-                </div>
-              </div>
+        {/* Right Sidebar - Fully Responsive */}
+        <div className="w-full lg:w-80 xl:w-96 bg-white border-t lg:border-t-0 lg:border-l shadow-lg flex flex-col max-h-[50vh] lg:max-h-none">
+          {/* Sidebar Header */}
+          <div className="px-4 lg:px-6 py-3 lg:py-4 border-b bg-gray-50 flex-shrink-0">
+            <div className="flex items-center space-x-2">
+              <Crop className="h-4 lg:h-5 w-4 lg:w-5 text-cyan-600" />
+              <h2 className="text-base lg:text-lg font-semibold text-gray-900">Crop Settings</h2>
             </div>
-          ) : (
-            <div className="h-full w-full relative">
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0 w-full h-full cursor-crosshair"
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-              />
-              
-              {/* Crop Info Overlay */}
-              <div className="absolute top-4 left-4 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
-                <div className="space-y-1">
-                  <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
-                  <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
-                  <div className="text-gray-300">Use arrow keys to move • Shift+arrows for 10px steps</div>
-                </div>
-              </div>
-
-              {/* Mobile Zoom Controls */}
-              <div className="lg:hidden absolute bottom-4 right-4 flex items-center space-x-1 bg-white/90 rounded-lg p-2 shadow-lg">
-                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-                <span className="text-sm px-2">{zoomLevel}%</span>
-                <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.min(200, prev + 25))}>
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Right Sidebar - Mobile Responsive */}
-      <div className="w-full lg:w-80 bg-white border-l shadow-lg flex flex-col max-h-screen lg:max-h-none">
-        {/* Sidebar Header */}
-        <div className="px-4 lg:px-6 py-4 border-b bg-gray-50 flex-shrink-0">
-          <div className="flex items-center space-x-2">
-            <Crop className="h-5 w-5 text-cyan-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Crop Settings</h2>
+            <p className="text-xs lg:text-sm text-gray-600 mt-1">Adjust crop area and output options</p>
           </div>
-          <p className="text-sm text-gray-600 mt-1">Adjust crop area and output options</p>
-        </div>
 
-        {/* Sidebar Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <ScrollArea className="flex-1">
-            <div className="p-4 lg:p-6 space-y-6">
-              {/* Quick Presets */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Quick Presets</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset("instagram-post")}
-                    className="text-xs h-auto p-2"
-                  >
-                    Instagram Post
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset("youtube-thumbnail")}
-                    className="text-xs h-auto p-2"
-                  >
-                    YouTube
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset("facebook-post")}
-                    className="text-xs h-auto p-2"
-                  >
-                    Facebook
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset("twitter-post")}
-                    className="text-xs h-auto p-2"
-                  >
-                    Twitter
-                  </Button>
+          {/* Sidebar Content */}
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+                {/* Social Media Presets */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Social Media Presets</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {socialPresets.slice(0, 6).map((preset, index) => (
+                      <Button
+                        key={index}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyPreset(preset)}
+                        className="text-xs h-auto p-2 flex flex-col items-center"
+                        disabled={!file}
+                      >
+                        <span className="font-medium">{preset.name.split(' ')[0]}</span>
+                        <span className="text-xs text-gray-500">{preset.aspectRatio}</span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Tool Options */}
-              {cropOptions.map((option) => (
-                <div key={option.key} className="space-y-2">
-                  <Label className="text-sm font-medium">{option.label}</Label>
-                  
-                  {option.type === "select" && (
-                    <Select
-                      value={toolOptions[option.key]?.toString()}
-                      onValueChange={(value) => {
-                        setToolOptions(prev => ({ ...prev, [option.key]: value }))
-                        
-                        // Apply preset if selected
-                        if (option.key === "cropPreset" && value !== "custom") {
-                          applyPreset(value)
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {option.selectOptions?.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                {/* Tool Options */}
+                {cropOptions.map((option) => (
+                  <div key={option.key} className="space-y-2">
+                    <Label className="text-sm font-medium">{option.label}</Label>
+                    
+                    {option.type === "select" && (
+                      <Select
+                        value={toolOptions[option.key]?.toString()}
+                        onValueChange={(value) => {
+                          setToolOptions(prev => ({ ...prev, [option.key]: value }))
+                        }}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {option.selectOptions?.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
 
-                  {option.type === "slider" && (
-                    <div className="space-y-2">
-                      <Slider
-                        value={[toolOptions[option.key] || option.defaultValue]}
-                        onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
-                        min={option.min}
-                        max={option.max}
-                        step={option.step}
-                      />
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>{option.min}</span>
-                        <span className="font-medium">{toolOptions[option.key] || option.defaultValue}</span>
-                        <span>{option.max}</span>
+                    {option.type === "slider" && (
+                      <div className="space-y-2">
+                        <Slider
+                          value={[toolOptions[option.key] || option.defaultValue]}
+                          onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                          min={option.min}
+                          max={option.max}
+                          step={option.step}
+                        />
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>{option.min}</span>
+                          <span className="font-medium">{toolOptions[option.key] || option.defaultValue}</span>
+                          <span>{option.max}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {option.type === "color" && (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="color"
+                          value={toolOptions[option.key] || option.defaultValue}
+                          onChange={(e) => {
+                            setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
+                          }}
+                          className="w-8 lg:w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                        />
+                        <Input
+                          value={toolOptions[option.key] || option.defaultValue}
+                          onChange={(e) => {
+                            setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
+                          }}
+                          className="flex-1 font-mono text-xs lg:text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Manual Crop Controls */}
+                {file && (
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="h-px bg-gray-200 flex-1"></div>
+                      <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Manual Adjust</Label>
+                      <div className="h-px bg-gray-200 flex-1"></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 lg:gap-3">
+                      <div>
+                        <Label className="text-xs">X Position (%)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(file.cropArea.x)}
+                          onChange={(e) => {
+                            const value = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                            updateCropArea({ ...file.cropArea, x: value })
+                          }}
+                          className="text-xs h-8"
+                          min={0}
+                          max={100}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Y Position (%)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(file.cropArea.y)}
+                          onChange={(e) => {
+                            const value = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                            updateCropArea({ ...file.cropArea, y: value })
+                          }}
+                          className="text-xs h-8"
+                          min={0}
+                          max={100}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Width (%)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(file.cropArea.width)}
+                          onChange={(e) => {
+                            const value = Math.max(5, Math.min(100, parseInt(e.target.value) || 5))
+                            updateCropArea({ ...file.cropArea, width: value })
+                          }}
+                          className="text-xs h-8"
+                          min={5}
+                          max={100}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Height (%)</Label>
+                        <Input
+                          type="number"
+                          value={Math.round(file.cropArea.height)}
+                          onChange={(e) => {
+                            const value = Math.max(5, Math.min(100, parseInt(e.target.value) || 5))
+                            updateCropArea({ ...file.cropArea, height: value })
+                          }}
+                          className="text-xs h-8"
+                          min={5}
+                          max={100}
+                        />
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                )}
 
-              {/* Manual Crop Controls */}
-              {file && (
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="h-px bg-gray-200 flex-1"></div>
-                    <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Manual Adjust</Label>
-                    <div className="h-px bg-gray-200 flex-1"></div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">X Position (%)</Label>
-                      <Input
-                        type="number"
-                        value={Math.round(file.cropArea.x)}
-                        onChange={(e) => {
-                          const value = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
-                          updateCropArea({ ...file.cropArea, x: value })
-                        }}
-                        className="text-xs h-8"
-                        min={0}
-                        max={100}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Y Position (%)</Label>
-                      <Input
-                        type="number"
-                        value={Math.round(file.cropArea.y)}
-                        onChange={(e) => {
-                          const value = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
-                          updateCropArea({ ...file.cropArea, y: value })
-                        }}
-                        className="text-xs h-8"
-                        min={0}
-                        max={100}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Width (%)</Label>
-                      <Input
-                        type="number"
-                        value={Math.round(file.cropArea.width)}
-                        onChange={(e) => {
-                          const value = Math.max(5, Math.min(100, parseInt(e.target.value) || 5))
-                          updateCropArea({ ...file.cropArea, width: value })
-                        }}
-                        className="text-xs h-8"
-                        min={5}
-                        max={100}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Height (%)</Label>
-                      <Input
-                        type="number"
-                        value={Math.round(file.cropArea.height)}
-                        onChange={(e) => {
-                          const value = Math.max(5, Math.min(100, parseInt(e.target.value) || 5))
-                          updateCropArea({ ...file.cropArea, height: value })
-                        }}
-                        className="text-xs h-8"
-                        min={5}
-                        max={100}
-                      />
+                {/* File Info */}
+                {file && (
+                  <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-cyan-800 mb-2">Image Info</h4>
+                    <div className="text-xs text-cyan-700 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Original Size:</span>
+                        <span className="font-medium">{file.dimensions.width}×{file.dimensions.height}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>File Size:</span>
+                        <span className="font-medium">{formatFileSize(file.size)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Crop Size:</span>
+                        <span className="font-medium">
+                          {Math.round((file.cropArea.width / 100) * file.dimensions.width)}×{Math.round((file.cropArea.height / 100) * file.dimensions.height)}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* File Info */}
-              {file && (
-                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-cyan-800 mb-2">Image Info</h4>
-                  <div className="text-xs text-cyan-700 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Original Size:</span>
-                      <span className="font-medium">{file.dimensions.width}×{file.dimensions.height}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>File Size:</span>
-                      <span className="font-medium">{formatFileSize(file.size)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Crop Size:</span>
-                      <span className="font-medium">
-                        {Math.round((file.cropArea.width / 100) * file.dimensions.width)}×{Math.round((file.cropArea.height / 100) * file.dimensions.height)}
-                      </span>
-                    </div>
-                  </div>
+                {/* Sidebar Ad */}
+                <div className="hidden lg:block">
+                  <AdBanner 
+                    adSlot="crop-sidebar"
+                    adFormat="auto"
+                    className="w-full"
+                  />
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            </ScrollArea>
+          </div>
 
           {/* Fixed Sidebar Footer */}
           <div className="p-4 lg:p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
@@ -984,7 +1024,7 @@ export default function ImageCropperPage() {
             <Button 
               onClick={handleProcess}
               disabled={isProcessing || !file}
-              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-3 text-base font-semibold"
+              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-2 lg:py-3 text-sm lg:text-base font-semibold"
               size="lg"
             >
               {isProcessing ? (
@@ -1012,7 +1052,7 @@ export default function ImageCropperPage() {
                 
                 <Button 
                   onClick={downloadFile}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2 lg:py-3 text-sm lg:text-base font-semibold"
                   size="lg"
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -1026,8 +1066,8 @@ export default function ImageCropperPage() {
               <div className="font-medium mb-2">How to crop:</div>
               <div>• Drag the crop area to move</div>
               <div>• Drag corners/edges to resize</div>
-              <div>• Use arrow keys for precise movement</div>
-              <div>• Hold Shift for 10px steps</div>
+              <div className="hidden lg:block">• Use arrow keys for precise movement</div>
+              <div className="hidden lg:block">• Hold Shift for 5px steps</div>
             </div>
           </div>
         </div>
@@ -1042,16 +1082,16 @@ export default function ImageCropperPage() {
         className="hidden"
       />
 
-      {/* Ad Banner */}
-      <div className="hidden lg:block absolute bottom-4 left-4 right-4 pointer-events-none">
-        <div className="max-w-4xl mx-auto pointer-events-auto">
-          <AdBanner 
-            adSlot="crop-tool-overlay"
-            adFormat="horizontal"
-            className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg"
-          />
-        </div>
+      {/* Mobile Bottom Ad */}
+      <div className="lg:hidden">
+        <AdBanner 
+          adSlot="mobile-bottom-banner"
+          adFormat="horizontal"
+          className="w-full p-4"
+        />
       </div>
+
+      <Footer />
     </div>
   )
 }

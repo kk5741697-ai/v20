@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge"
 import { Check, Star, Zap, Shield, Users, Crown } from "lucide-react"
 import Link from "next/link"
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
+
 const SUBSCRIPTION_PLANS = {
   FREE: {
     name: "Free",

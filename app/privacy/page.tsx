@@ -4,6 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Shield, Eye, Lock, Database, Globe, UserCheck, Mail, MapPin } from "lucide-react"
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
+
 const privacyPrinciples = [
   {
     icon: Shield,

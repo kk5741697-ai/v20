@@ -26,8 +26,6 @@ export const metadata: Metadata = {
   generator: "PixoraTools",
   keywords: "image tools, pdf tools, qr generator, online tools, photo editor, image converter, pdf merger, compress image, resize image, crop image, convert image, background remover, web tools, free tools",
   robots: "index, follow",
-  viewport: "width=device-width, initial-scale=1",
-  themeColor: "#3b82f6",
   openGraph: {
     title: "PixoraTools - Professional Online Tools Platform",
     description: "300+ professional web tools for PDF, image, QR, code, and SEO tasks. Fast, secure, and free.",
@@ -44,6 +42,13 @@ export const metadata: Metadata = {
   },
 }
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
 export default function RootLayout({
   children,
 }: Readonly<{

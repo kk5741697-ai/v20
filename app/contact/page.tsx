@@ -19,6 +19,14 @@ import {
   Star
 } from "lucide-react"
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
+
 const contactMethods = [
   {
     icon: Mail,

@@ -11,8 +11,17 @@ import {
   Globe,
   Scale,
   Users,
-  Gavel
+  Gavel,
+  Mail
 } from "lucide-react"
+
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
 
 export default function TermsPage() {
   return (

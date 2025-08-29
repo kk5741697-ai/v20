@@ -5,6 +5,14 @@ import { Shuffle, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
+
 const converterTools = [
   {
     title: "Unit Converter",

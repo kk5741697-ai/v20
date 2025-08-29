@@ -19,6 +19,14 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+export function generateViewport() {
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    themeColor: '#3b82f6',
+  }
+}
+
 const features = [
   {
     icon: Zap,

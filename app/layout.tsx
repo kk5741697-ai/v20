@@ -91,6 +91,52 @@ export default function RootLayout({
                   });
                 }
               });
+              
+              // Enhanced AdSense optimization for tools
+              window.addEventListener('DOMContentLoaded', function() {
+                // Track tool usage for better ad targeting
+                const toolName = document.querySelector('h1')?.textContent;
+                if (toolName && typeof gtag !== 'undefined') {
+                  gtag('event', 'tool_view', {
+                    'tool_name': toolName,
+                    'page_title': document.title
+                  });
+                }
+                
+                // Optimize ad refresh for SPA navigation
+                let lastUrl = location.href;
+                new MutationObserver(() => {
+                  const url = location.href;
+                  if (url !== lastUrl) {
+                    lastUrl = url;
+                    setTimeout(() => {
+                      if (typeof window.adsbygoogle !== 'undefined') {
+                        try {
+                          const ads = document.querySelectorAll('.adsbygoogle');
+                          ads.forEach(ad => {
+                            if (!ad.getAttribute('data-adsbygoogle-status')) {
+                              (window.adsbygoogle = window.adsbygoogle || []).push({});
+                            }
+                          });
+                        } catch (e) {
+                          console.warn('AdSense refresh failed:', e);
+                        }
+                      }
+                    }, 1000);
+                  }
+                }).observe(document, { subtree: true, childList: true });
+              });
+            `
+          }}
+        />
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-CMZ40J80GE"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-CMZ40J80GE');
             `
           }}
         />

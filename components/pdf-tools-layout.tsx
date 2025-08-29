@@ -82,6 +82,7 @@ export function PDFToolsLayout({
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingProgress, setProcessingProgress] = useState(0)
   const [selectedPages, setSelectedPages] = useState<string[]>([])
+  const [showUploadArea, setShowUploadArea] = useState(true)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -142,6 +143,7 @@ export function PDFToolsLayout({
 
     if (newFiles.length > 0) {
       setFiles(prev => [...prev, ...newFiles])
+      setShowUploadArea(false)
       toast({
         title: "PDFs uploaded",
         description: `${newFiles.length} PDF${newFiles.length > 1 ? 's' : ''} loaded successfully`
@@ -160,12 +162,16 @@ export function PDFToolsLayout({
 
   const removeFile = (fileId: string) => {
     setFiles(prev => prev.filter(f => f.id !== fileId))
+    if (files.length === 1) {
+      setShowUploadArea(true)
+    }
   }
 
   const resetTool = () => {
     setFiles([])
     setSelectedPages([])
     setProcessingProgress(0)
+    setShowUploadArea(true)
     
     const defaultOptions: Record<string, any> = {}
     options.forEach(option => {
@@ -237,183 +243,229 @@ export function PDFToolsLayout({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
-  const groupedOptions = options.reduce((acc, option) => {
+  const optionsBySection = options.reduce((acc, option) => {
     const section = option.section || "General"
     if (!acc[section]) acc[section] = []
     acc[section].push(option)
     return acc
   }, {} as Record<string, ToolOption[]>)
 
+  // Show upload area if no files
+  if (showUploadArea && files.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        
+        {/* Top Ad Banner */}
+        <div className="bg-white border-b">
+          <div className="container mx-auto px-4 py-3">
+            <AdBanner 
+              adSlot="tool-header-banner"
+              adFormat="horizontal"
+              className="max-w-4xl mx-auto"
+            />
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center space-x-2 mb-4">
+              <Icon className="h-8 w-8 text-red-600" />
+              <h1 className="text-3xl font-heading font-bold text-foreground">{title}</h1>
+            </div>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{description}</p>
+          </div>
+
+          <div className="max-w-2xl mx-auto">
+            <div 
+              className="border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-red-400 hover:bg-red-50/30 transition-all duration-300 p-16 group"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="relative mb-6">
+                <div className="absolute inset-0 bg-red-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
+                <Upload className="relative h-20 w-20 text-red-500 group-hover:text-red-600 transition-colors group-hover:scale-110 transform duration-300" />
+              </div>
+              <h3 className="text-2xl font-semibold mb-3 text-gray-700 group-hover:text-red-600 transition-colors">Drop PDF files here</h3>
+              <p className="text-gray-500 mb-6 text-lg text-center">or click to browse files</p>
+              <Button className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
+                <Upload className="h-5 w-5 mr-2" />
+                Choose PDF Files
+              </Button>
+              <div className="mt-6 space-y-2 text-center">
+                <p className="text-sm text-gray-500 font-medium">PDF files only</p>
+                <p className="text-xs text-gray-400">Up to {maxFiles} files • Up to 100MB each</p>
+              </div>
+            </div>
+
+            {/* Bottom Ad */}
+            <div className="mt-8">
+              <AdBanner 
+                adSlot="upload-bottom-banner"
+                adFormat="horizontal"
+                className="max-w-2xl mx-auto"
+              />
+            </div>
+          </div>
+        </div>
+
+        <Footer />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          multiple={maxFiles > 1}
+          onChange={(e) => handleFileUpload(e.target.files)}
+          className="hidden"
+        />
+      </div>
+    )
+  }
+
+  // Tool interface after files are uploaded
   return (
     <div className="min-h-screen bg-background">
       <Header />
       
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full overflow-hidden bg-gray-50">
-        {/* Left Canvas */}
+      {/* Top Ad Banner */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="horizontal"
+            className="max-w-6xl mx-auto"
+          />
+        </div>
+      </div>
+      
+      <div className="flex h-[calc(100vh-8rem)] w-full overflow-hidden">
+        {/* Left Canvas - Responsive with proper viewport handling */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="bg-white border-b px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between shadow-sm">
-            <div className="flex items-center space-x-2 lg:space-x-4">
+          {/* Tool Header */}
+          <div className="bg-white border-b px-4 lg:px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+            <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <Icon className="h-5 w-5 text-red-600" />
-                <h1 className="text-lg lg:text-xl font-semibold text-gray-900">{title}</h1>
+                <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
               </div>
-              {files.length > 0 && <Badge variant="secondary" className="hidden sm:inline-flex">PDF Mode</Badge>}
+              {files.length > 0 && <Badge variant="secondary">PDF Mode</Badge>}
             </div>
-            <div className="flex items-center space-x-1 lg:space-x-2">
+            <div className="flex items-center space-x-2">
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={resetTool}
-                className="h-8 lg:h-9"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Canvas Content */}
+          {/* Canvas Content - Properly constrained to viewport */}
           <div className="flex-1 overflow-hidden">
-            {files.length === 0 ? (
-              <div className="h-full flex items-center justify-center p-4 lg:p-6">
-                <div 
-                  className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-red-400 hover:bg-red-50/30 transition-all duration-300 p-6 lg:p-16 group"
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <div className="relative mb-4 lg:mb-6">
-                    <div className="absolute inset-0 bg-red-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
-                    <Upload className="relative h-12 lg:h-20 w-12 lg:w-20 text-red-500 group-hover:text-red-600 transition-colors group-hover:scale-110 transform duration-300" />
-                  </div>
-                  <h3 className="text-lg lg:text-2xl font-semibold mb-2 lg:mb-3 text-gray-700 group-hover:text-red-600 transition-colors">Drop PDF files here</h3>
-                  <p className="text-gray-500 mb-4 lg:mb-6 text-sm lg:text-lg text-center">or click to browse files</p>
-                  <Button className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 lg:px-8 py-2 lg:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Choose PDF Files
-                  </Button>
-                  <div className="mt-4 lg:mt-6 space-y-2 text-center">
-                    <p className="text-sm text-gray-500 font-medium">
-                      PDF files only
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Up to {maxFiles} files • Up to 100MB each
-                    </p>
-                  </div>
-                  
-                  {/* Mobile Ad */}
-                  <div className="lg:hidden mt-6">
-                    <AdBanner 
-                      adSlot="mobile-upload-area"
-                      adFormat="auto"
-                      className="max-w-sm mx-auto"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="h-full p-4 lg:p-6 overflow-auto">
-                <div className="space-y-4">
-                  {files.map((file) => (
-                    <Card key={file.id} className="relative">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <FileText className="h-8 w-8 text-red-600" />
-                            <div>
-                              <CardTitle className="text-base">{file.name}</CardTitle>
-                              <div className="flex items-center space-x-4 text-sm text-gray-500">
-                                <span>{formatFileSize(file.size)}</span>
-                                {file.pageCount && <span>{file.pageCount} pages</span>}
-                              </div>
+            <ScrollArea className="h-full">
+              <div className="p-4 lg:p-6 space-y-4 min-h-[calc(100vh-12rem)]">
+                {files.map((file) => (
+                  <Card key={file.id} className="relative">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-8 w-8 text-red-600" />
+                          <div>
+                            <CardTitle className="text-base">{file.name}</CardTitle>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <span>{formatFileSize(file.size)}</span>
+                              {file.pageCount && <span>{file.pageCount} pages</span>}
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeFile(file.id)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
                         </div>
-                      </CardHeader>
-                      
-                      {allowPageSelection && file.pages && (
-                        <CardContent>
-                          <div className="space-y-3">
-                            <Label className="text-sm font-medium">Select Pages</Label>
-                            <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-48 overflow-y-auto">
-                              {file.pages.map((page) => {
-                                const pageKey = `${file.id}-page-${page.pageNumber}`
-                                const isSelected = selectedPages.includes(pageKey)
-                                
-                                return (
-                                  <div
-                                    key={pageKey}
-                                    className={`relative cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
-                                      isSelected ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-200 hover:border-red-300'
-                                    }`}
-                                    onClick={() => togglePageSelection(pageKey)}
-                                  >
-                                    <img
-                                      src={page.thumbnail}
-                                      alt={`Page ${page.pageNumber}`}
-                                      className="w-full aspect-[3/4] object-cover"
-                                    />
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs text-center py-1">
-                                      {page.pageNumber}
-                                    </div>
-                                    {isSelected && (
-                                      <div className="absolute top-1 right-1">
-                                        <CheckCircle className="h-4 w-4 text-red-600 bg-white rounded-full" />
-                                      </div>
-                                    )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeFile(file.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    
+                    {allowPageSelection && file.pages && (
+                      <CardContent>
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">Select Pages</Label>
+                          <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-48 overflow-y-auto">
+                            {file.pages.map((page) => {
+                              const pageKey = `${file.id}-page-${page.pageNumber}`
+                              const isSelected = selectedPages.includes(pageKey)
+                              
+                              return (
+                                <div
+                                  key={pageKey}
+                                  className={`relative cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
+                                    isSelected ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-200 hover:border-red-300'
+                                  }`}
+                                  onClick={() => togglePageSelection(pageKey)}
+                                >
+                                  <img
+                                    src={page.thumbnail}
+                                    alt={`Page ${page.pageNumber}`}
+                                    className="w-full aspect-[3/4] object-cover"
+                                  />
+                                  <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs text-center py-1">
+                                    {page.pageNumber}
                                   </div>
-                                )
-                              })}
-                            </div>
-                            {selectedPages.length > 0 && (
-                              <p className="text-sm text-gray-600">
-                                {selectedPages.length} page{selectedPages.length !== 1 ? 's' : ''} selected
-                              </p>
-                            )}
+                                  {isSelected && (
+                                    <div className="absolute top-1 right-1">
+                                      <CheckCircle className="h-4 w-4 text-red-600 bg-white rounded-full" />
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
-                        </CardContent>
-                      )}
-                    </Card>
-                  ))}
-                </div>
+                          {selectedPages.length > 0 && (
+                            <p className="text-sm text-gray-600">
+                              {selectedPages.length} page{selectedPages.length !== 1 ? 's' : ''} selected
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
 
-                {/* Desktop Ad */}
-                <div className="hidden lg:block mt-8">
+                {/* Canvas Ad */}
+                <div className="my-8">
                   <AdBanner 
-                    adSlot="pdf-tool-canvas"
+                    adSlot="pdf-canvas-content"
                     adFormat="horizontal"
                     className="max-w-2xl mx-auto"
                   />
                 </div>
               </div>
-            )}
+            </ScrollArea>
           </div>
         </div>
 
-        {/* Right Sidebar */}
-        <div className="w-full lg:w-80 xl:w-96 bg-white border-t lg:border-t-0 lg:border-l shadow-lg flex flex-col max-h-[50vh] lg:max-h-none">
+        {/* Fixed Right Sidebar - AdSense Optimized */}
+        <div className="w-80 xl:w-96 bg-white border-l shadow-lg flex flex-col h-full">
           {/* Sidebar Header */}
-          <div className="px-4 lg:px-6 py-3 lg:py-4 border-b bg-gray-50 flex-shrink-0">
+          <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
             <div className="flex items-center space-x-2">
-              <Icon className="h-4 lg:h-5 w-4 lg:w-5 text-red-600" />
-              <h2 className="text-base lg:text-lg font-semibold text-gray-900">{title}</h2>
+              <Icon className="h-5 w-5 text-red-600" />
+              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
             </div>
-            <p className="text-xs lg:text-sm text-gray-600 mt-1">{description}</p>
+            <p className="text-sm text-gray-600 mt-1">{description}</p>
           </div>
 
-          {/* Sidebar Content */}
+          {/* Sidebar Content - Scrollable */}
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
-              <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+              <div className="p-6 space-y-6">
                 {/* Tool Options */}
-                {Object.entries(groupedOptions).map(([section, sectionOptions]) => (
+                {Object.entries(optionsBySection).map(([section, sectionOptions]) => (
                   <div key={section} className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <div className="h-px bg-gray-200 flex-1"></div>
@@ -523,19 +575,17 @@ export function PDFToolsLayout({
                 )}
 
                 {/* Sidebar Ad */}
-                <div className="hidden lg:block">
-                  <AdBanner 
-                    adSlot="pdf-sidebar"
-                    adFormat="auto"
-                    className="w-full"
-                  />
-                </div>
+                <AdBanner 
+                  adSlot="pdf-sidebar"
+                  adFormat="auto"
+                  className="w-full"
+                />
               </div>
             </ScrollArea>
           </div>
 
           {/* Fixed Sidebar Footer */}
-          <div className="p-4 lg:p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
+          <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
             {isProcessing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center space-x-2 mb-2">
@@ -549,7 +599,7 @@ export function PDFToolsLayout({
             <Button 
               onClick={handleProcess}
               disabled={isProcessing || files.length === 0}
-              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 lg:py-3 text-sm lg:text-base font-semibold"
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-base font-semibold"
               size="lg"
             >
               {isProcessing ? (
@@ -577,24 +627,6 @@ export function PDFToolsLayout({
         onChange={(e) => handleFileUpload(e.target.files)}
         className="hidden"
       />
-
-      {/* Mobile Bottom Ad */}
-      <div className="lg:hidden">
-        <AdBanner 
-          adSlot="mobile-bottom-banner"
-          adFormat="horizontal"
-          className="w-full p-4"
-        />
-      </div>
-
-      <Footer />
     </div>
   )
-
-  const groupedOptions = options.reduce((acc, option) => {
-    const section = option.section || "General"
-    if (!acc[section]) acc[section] = []
-    acc[section].push(option)
-    return acc
-  }, {} as Record<string, ToolOption[]>)
 }

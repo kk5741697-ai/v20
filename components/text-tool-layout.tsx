@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,6 +28,7 @@ import {
   FileText
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { AdBanner } from "@/components/ads/ad-banner"
 
 interface ToolOption {
   key: string
@@ -158,6 +161,19 @@ export function TextToolLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      {/* Top Ad Banner */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-3">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="horizontal"
+            className="max-w-4xl mx-auto"
+          />
+        </div>
+      </div>
+
       {/* Header */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-4">
@@ -304,6 +320,15 @@ export function TextToolLayout({
           </Card>
         </div>
 
+        {/* Center Ad */}
+        <div className="mb-8">
+          <AdBanner 
+            adSlot="text-tool-center"
+            adFormat="horizontal"
+            className="max-w-4xl mx-auto"
+          />
+        </div>
+
         {/* Tool Options */}
         {options.length > 0 && (
           <Card className="mb-8">
@@ -409,6 +434,15 @@ export function TextToolLayout({
           </Card>
         )}
 
+        {/* Bottom Ad */}
+        <div className="mt-8">
+          <AdBanner 
+            adSlot="text-tool-bottom"
+            adFormat="horizontal"
+            className="max-w-4xl mx-auto"
+          />
+        </div>
+
         {/* Examples */}
         {examples.length > 0 && (
           <div className="mt-12">
@@ -433,6 +467,8 @@ export function TextToolLayout({
           </div>
         )}
       </div>
+
+      <Footer />
     </div>
   )
 }

@@ -121,6 +121,7 @@ export default function ImageCropperPage() {
   const [resizeHandle, setResizeHandle] = useState<string>("")
   const [imageScale, setImageScale] = useState(1)
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 })
+  const [showUploadArea, setShowUploadArea] = useState(true)
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -147,38 +148,6 @@ export default function ImageCropperPage() {
       drawCanvas()
     }
   }, [file?.cropArea])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!file) return
-      
-      e.preventDefault()
-      const step = e.shiftKey ? 5 : 1
-      let newCropArea = { ...file.cropArea }
-      
-      switch (e.key) {
-        case "ArrowLeft":
-          newCropArea.x = Math.max(0, newCropArea.x - step)
-          break
-        case "ArrowRight":
-          newCropArea.x = Math.min(100 - newCropArea.width, newCropArea.x + step)
-          break
-        case "ArrowUp":
-          newCropArea.y = Math.max(0, newCropArea.y - step)
-          break
-        case "ArrowDown":
-          newCropArea.y = Math.min(100 - newCropArea.height, newCropArea.y + step)
-          break
-        default:
-          return
-      }
-      
-      updateCropArea(newCropArea)
-    }
-
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [file])
 
   const calculateImageFit = () => {
     if (!file || !containerRef.current) return
@@ -237,6 +206,7 @@ export default function ImageCropperPage() {
 
       setFile(imageFile)
       setProcessedFile(null)
+      setShowUploadArea(false)
       
       toast({
         title: "Image uploaded",
@@ -566,6 +536,7 @@ export default function ImageCropperPage() {
     setFile(null)
     setProcessedFile(null)
     setZoomLevel(100)
+    setShowUploadArea(true)
     
     const defaultOptions: Record<string, any> = {}
     cropOptions.forEach(option => {
@@ -682,145 +653,181 @@ export default function ImageCropperPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
+  // Show upload area if no file
+  if (showUploadArea && !file) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        
+        {/* Top Ad Banner */}
+        <div className="bg-white border-b">
+          <div className="container mx-auto px-4 py-3">
+            <AdBanner 
+              adSlot="tool-header-banner"
+              adFormat="horizontal"
+              className="max-w-4xl mx-auto"
+            />
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center space-x-2 mb-4">
+              <Crop className="h-8 w-8 text-cyan-600" />
+              <h1 className="text-3xl font-heading font-bold text-foreground">Crop Image</h1>
+            </div>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Crop images with precision using our visual editor and aspect ratio presets.
+            </p>
+          </div>
+
+          <div className="max-w-2xl mx-auto">
+            <div 
+              className="border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-16 group"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="relative mb-6">
+                <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
+                <Upload className="relative h-20 w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
+              </div>
+              <h3 className="text-2xl font-semibold mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
+              <p className="text-gray-500 mb-6 text-lg text-center">or click to browse files</p>
+              <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
+                <Upload className="h-5 w-5 mr-2" />
+                Choose Image
+              </Button>
+              <div className="mt-6 space-y-2 text-center">
+                <p className="text-sm text-gray-500 font-medium">JPG, PNG, WebP files</p>
+                <p className="text-xs text-gray-400">Single image • Up to 100MB</p>
+              </div>
+            </div>
+
+            {/* Bottom Ad */}
+            <div className="mt-8">
+              <AdBanner 
+                adSlot="upload-bottom-banner"
+                adFormat="horizontal"
+                className="max-w-2xl mx-auto"
+              />
+            </div>
+          </div>
+        </div>
+
+        <Footer />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => handleFileUpload(e.target.files)}
+          className="hidden"
+        />
+      </div>
+    )
+  }
+
+  // Tool interface after file is uploaded
   return (
     <div className="min-h-screen bg-background">
       <Header />
       
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full overflow-hidden bg-gray-50">
-        {/* Left Canvas */}
+      {/* Top Ad Banner */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="horizontal"
+            className="max-w-6xl mx-auto"
+          />
+        </div>
+      </div>
+      
+      <div className="flex h-[calc(100vh-8rem)] w-full overflow-hidden">
+        {/* Left Canvas - Responsive with proper viewport handling */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="bg-white border-b px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between shadow-sm">
-            <div className="flex items-center space-x-2 lg:space-x-4">
+          {/* Tool Header */}
+          <div className="bg-white border-b px-4 lg:px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+            <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <Crop className="h-5 w-5 text-cyan-600" />
-                <h1 className="text-lg lg:text-xl font-semibold text-gray-900">Crop Image</h1>
+                <h1 className="text-xl font-semibold text-gray-900">Crop Image</h1>
               </div>
-              {file && <Badge variant="secondary" className="hidden sm:inline-flex">Single Mode</Badge>}
+              <Badge variant="secondary">Single Mode</Badge>
             </div>
-            <div className="flex items-center space-x-1 lg:space-x-2">
+            <div className="flex items-center space-x-2">
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={resetTool}
-                className="h-8 lg:h-9"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
               {file && (
                 <div className="flex items-center space-x-1 border rounded-md">
                   <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
-                    <ZoomOut className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <ZoomOut className="h-4 w-4" />
                   </Button>
-                  <span className="text-xs lg:text-sm px-1 lg:px-2">{zoomLevel}%</span>
+                  <span className="text-sm px-2">{zoomLevel}%</span>
                   <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.min(200, prev + 25))}>
-                    <ZoomIn className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <ZoomIn className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setZoomLevel(100)}>
-                    <Maximize2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <Maximize2 className="h-4 w-4" />
                   </Button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Canvas Content */}
+          {/* Canvas Content - Properly constrained to viewport */}
           <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-            {!file ? (
-              <div className="h-full flex items-center justify-center p-4 lg:p-6">
-                <div 
-                  className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/30 transition-all duration-300 p-6 lg:p-16 group"
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <div className="relative mb-4 lg:mb-6">
-                    <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
-                    <Upload className="relative h-12 lg:h-20 w-12 lg:w-20 text-cyan-500 group-hover:text-cyan-600 transition-colors group-hover:scale-110 transform duration-300" />
-                  </div>
-                  <h3 className="text-lg lg:text-2xl font-semibold mb-2 lg:mb-3 text-gray-700 group-hover:text-cyan-600 transition-colors">Drop image here</h3>
-                  <p className="text-gray-500 mb-4 lg:mb-6 text-sm lg:text-lg text-center">or click to browse files</p>
-                  <Button className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-4 lg:px-8 py-2 lg:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Choose Image
-                  </Button>
-                  <div className="mt-4 lg:mt-6 space-y-2 text-center">
-                    <p className="text-sm text-gray-500 font-medium">
-                      JPG, PNG, WebP files
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Single image • Up to 100MB
-                    </p>
-                  </div>
-                  
-                  {/* Mobile Ad */}
-                  <div className="lg:hidden mt-6">
-                    <AdBanner 
-                      adSlot="mobile-upload-area"
-                      adFormat="auto"
-                      className="max-w-sm mx-auto"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="h-full w-full relative">
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp}
-                  onTouchStart={handleMouseDown}
-                  onTouchMove={handleMouseMove}
-                  onTouchEnd={handleMouseUp}
-                />
-                
-                {/* Crop Info Overlay */}
-                <div className="absolute top-2 lg:top-4 left-2 lg:left-4 bg-black/70 text-white text-xs px-2 lg:px-3 py-1 lg:py-2 rounded-lg">
-                  <div className="space-y-1">
-                    <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
-                    <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
-                    <div className="text-gray-300 hidden lg:block">Use arrow keys • Shift+arrows for 5px steps</div>
-                  </div>
-                </div>
-
-                {/* Mobile Instructions */}
-                <div className="lg:hidden absolute bottom-2 left-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded-lg text-center">
-                  Drag to move • Drag corners to resize
-                </div>
-
-                {/* Desktop Ad Overlay */}
-                <div className="hidden lg:block absolute bottom-4 left-4 right-4 pointer-events-none">
-                  <div className="max-w-md mx-auto pointer-events-auto">
-                    <AdBanner 
-                      adSlot="crop-tool-overlay"
-                      adFormat="horizontal"
-                      className="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg"
-                    />
-                  </div>
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleMouseDown}
+              onTouchMove={handleMouseMove}
+              onTouchEnd={handleMouseUp}
+            />
+            
+            {/* Crop Info Overlay */}
+            {file && (
+              <div className="absolute top-4 left-4 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
+                <div className="space-y-1">
+                  <div>X: {Math.round(file.cropArea.x)}% Y: {Math.round(file.cropArea.y)}%</div>
+                  <div>W: {Math.round(file.cropArea.width)}% H: {Math.round(file.cropArea.height)}%</div>
+                  <div className="text-gray-300 hidden lg:block">Use arrow keys • Shift+arrows for 5px steps</div>
                 </div>
               </div>
             )}
+
+            {/* Mobile Instructions */}
+            <div className="lg:hidden absolute bottom-2 left-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded-lg text-center">
+              Drag to move • Drag corners to resize
+            </div>
           </div>
         </div>
 
-        {/* Right Sidebar - Fully Responsive */}
-        <div className="w-full lg:w-80 xl:w-96 bg-white border-t lg:border-t-0 lg:border-l shadow-lg flex flex-col max-h-[50vh] lg:max-h-none">
+        {/* Fixed Right Sidebar - AdSense Optimized */}
+        <div className="w-80 xl:w-96 bg-white border-l shadow-lg flex flex-col h-full">
           {/* Sidebar Header */}
-          <div className="px-4 lg:px-6 py-3 lg:py-4 border-b bg-gray-50 flex-shrink-0">
+          <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
             <div className="flex items-center space-x-2">
-              <Crop className="h-4 lg:h-5 w-4 lg:w-5 text-cyan-600" />
-              <h2 className="text-base lg:text-lg font-semibold text-gray-900">Crop Settings</h2>
+              <Crop className="h-5 w-5 text-cyan-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Crop Settings</h2>
             </div>
-            <p className="text-xs lg:text-sm text-gray-600 mt-1">Adjust crop area and output options</p>
+            <p className="text-sm text-gray-600 mt-1">Adjust crop area and output options</p>
           </div>
 
-          {/* Sidebar Content */}
+          {/* Sidebar Content - Scrollable */}
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
-              <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+              <div className="p-6 space-y-6">
                 {/* Social Media Presets */}
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Social Media Presets</Label>
@@ -891,14 +898,14 @@ export default function ImageCropperPage() {
                           onChange={(e) => {
                             setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
                           }}
-                          className="w-8 lg:w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                          className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
                         />
                         <Input
                           value={toolOptions[option.key] || option.defaultValue}
                           onChange={(e) => {
                             setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))
                           }}
-                          className="flex-1 font-mono text-xs lg:text-sm"
+                          className="flex-1 font-mono text-sm"
                         />
                       </div>
                     )}
@@ -914,7 +921,7 @@ export default function ImageCropperPage() {
                       <div className="h-px bg-gray-200 flex-1"></div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2 lg:gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs">X Position (%)</Label>
                         <Input
@@ -999,19 +1006,17 @@ export default function ImageCropperPage() {
                 )}
 
                 {/* Sidebar Ad */}
-                <div className="hidden lg:block">
-                  <AdBanner 
-                    adSlot="crop-sidebar"
-                    adFormat="auto"
-                    className="w-full"
-                  />
-                </div>
+                <AdBanner 
+                  adSlot="crop-sidebar"
+                  adFormat="auto"
+                  className="w-full"
+                />
               </div>
             </ScrollArea>
           </div>
 
           {/* Fixed Sidebar Footer */}
-          <div className="p-4 lg:p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
+          <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
             {isProcessing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center space-x-2 mb-2">
@@ -1024,7 +1029,7 @@ export default function ImageCropperPage() {
             <Button 
               onClick={handleProcess}
               disabled={isProcessing || !file}
-              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-2 lg:py-3 text-sm lg:text-base font-semibold"
+              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-3 text-base font-semibold"
               size="lg"
             >
               {isProcessing ? (
@@ -1052,7 +1057,7 @@ export default function ImageCropperPage() {
                 
                 <Button 
                   onClick={downloadFile}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2 lg:py-3 text-sm lg:text-base font-semibold"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
                   size="lg"
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -1081,17 +1086,6 @@ export default function ImageCropperPage() {
         onChange={(e) => handleFileUpload(e.target.files)}
         className="hidden"
       />
-
-      {/* Mobile Bottom Ad */}
-      <div className="lg:hidden">
-        <AdBanner 
-          adSlot="mobile-bottom-banner"
-          adFormat="horizontal"
-          className="w-full p-4"
-        />
-      </div>
-
-      <Footer />
     </div>
   )
 }

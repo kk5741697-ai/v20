@@ -37,7 +37,7 @@ export function AdBanner({
   // Show placeholder in development
   if (process.env.NODE_ENV === "development") {
     return (
-      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm ${className}`}>
+      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm min-h-[90px] flex items-center justify-center ${className}`}>
         <div className="text-gray-600 font-medium mb-1">Ad Space</div>
         <div className="text-xs text-gray-400">{adSlot}</div>
       </div>
@@ -57,12 +57,13 @@ export function AdBanner({
   }, [])
 
   return (
-    <div className={`ad-container ${className}`} style={style}>
+    <div className={`ad-container min-h-[90px] flex items-center justify-center ${className}`} style={style}>
       <ins
         className="adsbygoogle"
         style={{
           display: "block",
           textAlign: "center",
+          minHeight: "90px",
           ...style
         }}
         data-ad-client={APP_CONFIG.adsensePublisherId}

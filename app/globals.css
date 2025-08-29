@@ -209,3 +209,80 @@
   padding: 0 2px;
   border-radius: 2px;
 }
+
+/* Enhanced responsive canvas styles */
+.tool-canvas {
+  height: calc(100vh - 8rem);
+  max-height: calc(100vh - 8rem);
+  overflow: hidden;
+}
+
+.tool-canvas-content {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Fixed sidebar styles */
+.tool-sidebar {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  z-index: 30;
+}
+
+@media (max-width: 1024px) {
+  .tool-sidebar {
+    position: relative;
+    height: auto;
+    max-height: 50vh;
+  }
+}
+
+/* Crop tool specific styles */
+.crop-canvas {
+  touch-action: none;
+  user-select: none;
+}
+
+.crop-overlay {
+  pointer-events: none;
+}
+
+.crop-handle {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.crop-handle:active {
+  cursor: grabbing;
+}
+
+/* AdSense optimization styles */
+.ad-optimized-layout {
+  display: grid;
+  grid-template-areas: 
+    "header header"
+    "canvas sidebar"
+    "footer footer";
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr 320px;
+  min-height: 100vh;
+}
+
+@media (max-width: 1024px) {
+  .ad-optimized-layout {
+    grid-template-areas: 
+      "header"
+      "canvas"
+      "sidebar"
+      "footer";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto auto;
+  }
+}
+
+.ad-header { grid-area: header; }
+.ad-canvas { grid-area: canvas; }
+.ad-sidebar { grid-area: sidebar; }
+.ad-footer { grid-area: footer; }

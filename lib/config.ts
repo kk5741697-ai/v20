@@ -11,10 +11,10 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG: AppConfig = {
-  enableAds: false, // Disabled by default
+  enableAds: true, // Enable ads for AdSense approval
   adsensePublisherId: process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID,
-  enableAutoAds: false,
-  enableAnalytics: false,
+  enableAutoAds: true,
+  enableAnalytics: true,
   enableSearch: true,
   maxFileSize: 100,
   maxFiles: 20,

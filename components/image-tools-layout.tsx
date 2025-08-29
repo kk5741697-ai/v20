@@ -806,7 +806,6 @@ export function ImageToolsLayout({
                   </ScrollArea>
                 </div>
               )}
-              )}
             </div>
           )}
         </div>

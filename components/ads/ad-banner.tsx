@@ -25,8 +25,10 @@ export function AdBanner({
   // Don't render in development
   if (process.env.NODE_ENV === "development") {
     return (
-      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm ${className}`}>
-        Ad Banner ({adSlot})
+      <div className={`bg-blue-50 border border-blue-200 rounded-lg p-8 text-center ${className}`}>
+        <div className="text-blue-600 font-medium mb-2">Advertisement Space</div>
+        <div className="text-blue-500 text-sm">AdSense Banner ({adSlot})</div>
+        <div className="text-xs text-blue-400 mt-2">728x90 • Auto-responsive</div>
       </div>
     )
   }

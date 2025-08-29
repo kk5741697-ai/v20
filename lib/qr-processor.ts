@@ -63,7 +63,6 @@ export class QRProcessor {
           light: options.color?.light || "#FFFFFF",
         },
         errorCorrectionLevel: options.errorCorrectionLevel || "M",
-        type: options.type || "image/png",
         quality: options.quality || 0.92,
         maskPattern: options.maskPattern,
         version: options.version,
@@ -72,10 +71,6 @@ export class QRProcessor {
       // Generate base QR code
       const qrDataURL = await QRCode.toDataURL(text, qrOptions)
 
-      // Apply enhanced styling if specified
-      if (options.style || options.logo) {
-        return await this.enhanceQRCode(qrDataURL, options)
-      }
       // Add logo if provided
       if (options.logo?.src) {
         return await this.addLogoToQR(qrDataURL, options.logo, options.width || 1000, options.style)
@@ -88,7 +83,7 @@ export class QRProcessor {
     }
   }
 
-  private static async enhanceQRCode(qrDataURL: string, options: QRCodeOptions): Promise<string> {
+  private static async addLogoToQR(qrDataURL: string, logo: NonNullable<QRCodeOptions["logo"]>, size: number, style?: any): Promise<string> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
       const ctx = canvas.getContext("2d")
@@ -100,27 +95,14 @@ export class QRProcessor {
       const img = new Image()
       img.onload = async () => {
         try {
-          const size = options.width || 1000
           canvas.width = size
           canvas.height = size
 
           // Draw base QR code
           ctx.drawImage(img, 0, 0, size, size)
 
-          // Apply style enhancements
-          if (options.style) {
-            await this.applyQRStyling(ctx, canvas, options.style)
-          }
-
-          // Add logo if specified
-          if (options.logo?.src) {
-            await this.addLogoToCanvas(ctx, canvas, options.logo)
-          }
-
-          // Add frame if specified
-          if (options.style?.frame) {
-            this.addFrameToCanvas(ctx, canvas, options.style.frame, size)
-          }
+          // Add logo
+          await this.addLogoToCanvas(ctx, canvas, logo)
 
           resolve(canvas.toDataURL("image/png"))
         } catch (error) {

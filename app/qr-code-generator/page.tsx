@@ -164,10 +164,7 @@ export default function QRCodeGeneratorPage() {
       const logoSrc = logoFile ? URL.createObjectURL(logoFile) : logoUrl
       const qrOptions = {
         width: qrSize[0],
-        color: gradientEnabled ? {
-          dark: `linear-gradient(45deg, ${gradientColor1}, ${gradientColor2})`,
-          light: backgroundColor,
-        } : {
+        color: {
           dark: foregroundColor,
           light: backgroundColor,
         },
@@ -176,17 +173,6 @@ export default function QRCodeGeneratorPage() {
           src: logoSrc,
           width: qrSize[0] * 0.2,
         } : undefined,
-        style: {
-          shape: qrStyle,
-          corners: cornerStyle,
-          dots: dotStyle,
-          eyes: eyeStyle,
-          eyeColor: eyeColor,
-          frame: frameEnabled ? {
-            text: frameText,
-            color: frameColor
-          } : undefined
-        }
       }
 
       const qrDataURL = await QRProcessor.generateQRCode(qrContent, qrOptions)

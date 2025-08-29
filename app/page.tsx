@@ -13,6 +13,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+import { AdBanner } from "@/components/ads/ad-banner"
+
 const featuredTools = [
   {
     title: "Compress Image",
@@ -227,6 +229,17 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
+      {/* Ad Banner */}
+      <section className="py-8 px-4">
+        <div className="container mx-auto">
+          <AdBanner 
+            adSlot="homepage-banner"
+            adFormat="horizontal"
+            className="max-w-4xl mx-auto"
+          />
+        </div>
+      </section>
+
       <section className="py-16 px-4 bg-white">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">

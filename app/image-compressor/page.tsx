@@ -3,6 +3,8 @@
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Archive } from "lucide-react"
 import { ImageProcessor } from "@/lib/processors/image-processor"
+import { Footer } from "@/components/footer"
+import { AdBanner } from "@/components/ads/ad-banner"
 
 const compressOptions = [
   {
@@ -107,6 +109,19 @@ export default function ImageCompressorPage() {
         allowBatchProcessing={true}
         supportedFormats={["image/jpeg", "image/png", "image/webp", "image/gif"]}
         outputFormats={["jpeg", "png", "webp"]}
+      />
+      
+      {/* Ad Banner */}
+      <div className="container mx-auto px-4 py-8">
+        <AdBanner 
+          adSlot="tool-page-bottom"
+          adFormat="horizontal"
+          className="max-w-4xl mx-auto"
+        />
+      </div>
+      
+      <Footer />
+    </div>
       />
       
       {/* Ad Banner */}

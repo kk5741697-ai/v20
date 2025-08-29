@@ -33,6 +33,7 @@ import {
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { AdBanner } from "@/components/ads/ad-banner"
 
 interface ImageFile {
   id: string
@@ -329,11 +330,11 @@ export function ImageToolsLayout({
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
+    <div className="flex flex-col lg:flex-row h-screen w-full overflow-hidden bg-gray-50">
       {/* Left Canvas */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="bg-white border-b px-4 lg:px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-4">
             <Link href="/">
               <Button variant="ghost" size="sm">
@@ -342,13 +343,13 @@ export function ImageToolsLayout({
             </Link>
             <div className="flex items-center space-x-2">
               <Icon className="h-5 w-5 text-purple-600" />
-              <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
+              <h1 className="text-lg lg:text-xl font-semibold text-gray-900">{title}</h1>
             </div>
             <Badge variant="secondary">{files.length} files</Badge>
           </div>
           <div className="flex items-center space-x-2">
             {files.length > 0 && (
-              <div className="flex items-center border rounded-md">
+              <div className="hidden lg:flex items-center border rounded-md">
                 <Button 
                   variant={viewMode === "grid" ? "default" : "ghost"} 
                   size="sm" 
@@ -373,7 +374,7 @@ export function ImageToolsLayout({
               <RefreshCw className="h-4 w-4" />
             </Button>
             {selectedFileForPreview && (
-              <div className="flex items-center space-x-1 border rounded-md">
+              <div className="hidden lg:flex items-center space-x-1 border rounded-md">
                 <Button variant="ghost" size="sm" onClick={() => setZoomLevel(prev => Math.max(50, prev - 25))}>
                   <ZoomOut className="h-4 w-4" />
                 </Button>
@@ -394,18 +395,18 @@ export function ImageToolsLayout({
           {files.length === 0 ? (
             <div className="h-full flex items-center justify-center p-6">
               <div 
-                className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-all duration-300 p-16 group"
+                className="max-w-lg w-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-all duration-300 p-8 lg:p-16 group"
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div className="relative mb-6">
                   <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-xl group-hover:blur-2xl transition-all"></div>
-                  <Upload className="relative h-20 w-20 text-purple-500 group-hover:text-purple-600 transition-colors group-hover:scale-110 transform duration-300" />
+                  <Upload className="relative h-16 lg:h-20 w-16 lg:w-20 text-purple-500 group-hover:text-purple-600 transition-colors group-hover:scale-110 transform duration-300" />
                 </div>
-                <h3 className="text-2xl font-semibold mb-3 text-gray-700 group-hover:text-purple-600 transition-colors">Drop images here</h3>
-                <p className="text-gray-500 mb-6 text-lg">or click to browse files</p>
-                <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
+                <h3 className="text-xl lg:text-2xl font-semibold mb-3 text-gray-700 group-hover:text-purple-600 transition-colors">Drop images here</h3>
+                <p className="text-gray-500 mb-6 text-base lg:text-lg">or click to browse files</p>
+                <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-6 lg:px-8 py-2 lg:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 group-hover:scale-105">
                   <Upload className="h-4 w-4 mr-2" />
                   Choose Images
                 </Button>
@@ -416,6 +417,15 @@ export function ImageToolsLayout({
                   <p className="text-xs text-gray-400">
                     Maximum {maxFiles} files • Up to 100MB each
                   </p>
+                </div>
+                
+                {/* Mobile Ad Banner */}
+                <div className="lg:hidden mt-8">
+                  <AdBanner 
+                    adSlot="mobile-upload-area"
+                    adFormat="auto"
+                    className="max-w-sm mx-auto"
+                  />
                 </div>
               </div>
             </div>
@@ -495,9 +505,9 @@ export function ImageToolsLayout({
       </div>
 
       {/* Right Sidebar */}
-      <div className="w-80 bg-white border-l shadow-lg flex flex-col max-h-screen">
+      <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l shadow-lg flex flex-col max-h-screen lg:max-h-none">
         {/* Sidebar Header */}
-        <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
+        <div className="px-4 lg:px-6 py-4 border-b bg-gray-50 flex-shrink-0">
           <div className="flex items-center space-x-2">
             <Icon className="h-5 w-5 text-purple-600" />
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
@@ -508,7 +518,7 @@ export function ImageToolsLayout({
         {/* Sidebar Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <ScrollArea className="flex-1">
-            <div className="p-6 space-y-6">
+            <div className="p-4 lg:p-6 space-y-6">
               {/* Presets */}
               {presets.length > 0 && (
                 <div className="space-y-3">
@@ -529,6 +539,15 @@ export function ImageToolsLayout({
                 </div>
               )}
 
+            
+            {/* Desktop Ad Banner */}
+            <div className="hidden lg:block mt-4">
+              <AdBanner 
+                adSlot="tool-sidebar-bottom"
+                adFormat="auto"
+                className="w-full"
+              />
+            </div>
               {/* Tool Options */}
               {options.map((option) => {
                 if (option.condition && !option.condition(toolOptions)) {
@@ -637,7 +656,7 @@ export function ImageToolsLayout({
           </ScrollArea>
 
           {/* Fixed Sidebar Footer */}
-          <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
+          <div className="p-4 lg:p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
             {isProcessing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center space-x-2 mb-2">
@@ -718,6 +737,15 @@ export function ImageToolsLayout({
         onChange={(e) => handleFileUpload(e.target.files)}
         className="hidden"
       />
+      
+      {/* Mobile Bottom Ad */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t p-2 z-10">
+        <AdBanner 
+          adSlot="mobile-bottom-banner"
+          adFormat="horizontal"
+          className="w-full"
+        />
+      </div>
     </div>
   )
 }

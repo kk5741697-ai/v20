@@ -13,7 +13,7 @@ export interface AppConfig {
 export const APP_CONFIG: AppConfig = {
   enableAds: true, // Enable ads by default
   adsensePublisherId: "ca-pub-4755003409431265",
-  enableAutoAds: true, // Enable auto ads for better revenue
+  enableAutoAds: false, // Disable auto ads for better control
   enableAnalytics: true,
   enableSearch: true,
   maxFileSize: 100,

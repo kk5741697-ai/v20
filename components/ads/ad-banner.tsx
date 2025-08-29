@@ -14,7 +14,7 @@ interface AdBannerProps {
 }
 
 export function AdBanner({
-  adSlot = "default",
+  adSlot = "1234567890",
   adFormat = "auto",
   fullWidthResponsive = true,
   className = "",
@@ -62,10 +62,11 @@ export function AdBanner({
 
   if (process.env.NODE_ENV === "development") {
     return (
-      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-500 text-sm min-h-[90px] flex items-center justify-center ${className}`}>
+      <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-lg p-4 text-center text-gray-600 text-sm min-h-[90px] flex items-center justify-center ${className}`}>
         <div>
-          <div className="text-gray-600 font-medium mb-1">Ad Space</div>
-          <div className="text-xs text-gray-400">{adSlot}</div>
+          <div className="text-gray-700 font-medium mb-1">AdSense Ad Space</div>
+          <div className="text-xs text-gray-500">Slot: {adSlot}</div>
+          <div className="text-xs text-gray-400 mt-1">Will show ads after approval</div>
         </div>
       </div>
     )

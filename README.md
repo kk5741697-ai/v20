@@ -35,6 +35,24 @@ The ads system is **enabled by default** with proper AdSense integration:
 #### Configuration:
 The AdSense publisher ID is set in `lib/config.ts`. Auto ads are disabled for better control over ad placement and user experience.
 
+#### AdSense Setup Instructions:
+1. **Publisher ID**: Already configured with `ca-pub-4755003409431265`
+2. **Ad Slots**: Default slot IDs are set (you can customize these in each component)
+3. **Approval Process**: Once you get AdSense approval, ads will automatically start showing
+4. **No Additional Setup**: The ad code is already integrated - just wait for approval
+5. **Custom Slots**: After approval, you can create specific ad units in AdSense dashboard and update slot IDs
+
+#### Current Ad Slot Configuration:
+- All ad slots use default ID `1234567890` (placeholder)
+- After AdSense approval, you can:
+  - Keep default slots (ads will show automatically)
+  - Create custom ad units in AdSense dashboard
+  - Update slot IDs in components for better tracking
+
+#### Development vs Production:
+- **Development**: Shows placeholder ad spaces with slot information
+- **Production**: Will display actual AdSense ads after approval
+- **Testing**: Use `data-adtest="on"` attribute for testing (already configured)
 ### Search Functionality
 
 - Global search across all tools

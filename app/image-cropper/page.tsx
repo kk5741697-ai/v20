@@ -88,10 +88,24 @@ export default function ImageCropperPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [dragHandle, setDragHandle] = useState<string | null>(null)
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Update container rect when needed
+  useEffect(() => {
+    const updateContainerRect = () => {
+      if (containerRef.current) {
+        setContainerRect(containerRef.current.getBoundingClientRect())
+      }
+    }
+
+    updateContainerRect()
+    window.addEventListener('resize', updateContainerRect)
+    return () => window.removeEventListener('resize', updateContainerRect)
+  }, [files])
 
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
@@ -222,6 +236,107 @@ export default function ImageCropperPage() {
       return updated
     })
   }
+
+  // Enhanced mouse/touch handlers for crop area interaction
+  const handleCropMouseDown = (e: React.MouseEvent, handle: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!containerRect) return
+    
+    setIsDragging(true)
+    setDragHandle(handle)
+    setDragStart({
+      x: e.clientX - containerRect.left,
+      y: e.clientY - containerRect.top
+    })
+  }
+
+  const handleCropMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !dragHandle || !containerRect) return
+
+    const currentX = e.clientX - containerRect.left
+    const currentY = e.clientY - containerRect.top
+    const deltaX = ((currentX - dragStart.x) / containerRect.width) * 100
+    const deltaY = ((currentY - dragStart.y) / containerRect.height) * 100
+
+    switch (dragHandle) {
+      case 'move':
+        handleCropAreaChange({
+          x: cropArea.x + deltaX,
+          y: cropArea.y + deltaY
+        })
+        break
+      case 'nw':
+        handleCropAreaChange({
+          x: cropArea.x + deltaX,
+          y: cropArea.y + deltaY,
+          width: cropArea.width - deltaX,
+          height: cropArea.height - deltaY
+        })
+        break
+      case 'ne':
+        handleCropAreaChange({
+          y: cropArea.y + deltaY,
+          width: cropArea.width + deltaX,
+          height: cropArea.height - deltaY
+        })
+        break
+      case 'sw':
+        handleCropAreaChange({
+          x: cropArea.x + deltaX,
+          width: cropArea.width - deltaX,
+          height: cropArea.height + deltaY
+        })
+        break
+      case 'se':
+        handleCropAreaChange({
+          width: cropArea.width + deltaX,
+          height: cropArea.height + deltaY
+        })
+        break
+      case 'n':
+        handleCropAreaChange({
+          y: cropArea.y + deltaY,
+          height: cropArea.height - deltaY
+        })
+        break
+      case 's':
+        handleCropAreaChange({
+          height: cropArea.height + deltaY
+        })
+        break
+      case 'w':
+        handleCropAreaChange({
+          x: cropArea.x + deltaX,
+          width: cropArea.width - deltaX
+        })
+        break
+      case 'e':
+        handleCropAreaChange({
+          width: cropArea.width + deltaX
+        })
+        break
+    }
+
+    setDragStart({ x: currentX, y: currentY })
+  }, [isDragging, dragHandle, containerRect, dragStart, cropArea])
+
+  const handleCropMouseUp = useCallback(() => {
+    setIsDragging(false)
+    setDragHandle(null)
+  }, [])
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleCropMouseMove)
+      document.addEventListener('mouseup', handleCropMouseUp)
+      return () => {
+        document.removeEventListener('mousemove', handleCropMouseMove)
+        document.removeEventListener('mouseup', handleCropMouseUp)
+      }
+    }
+  }, [isDragging, handleCropMouseMove, handleCropMouseUp])
 
   const handleProcess = async () => {
     if (files.length === 0) {
@@ -617,21 +732,52 @@ export default function ImageCropperPage() {
                   className="w-full h-full object-contain"
                 />
                 
-                {/* Crop Overlay - Mobile Optimized */}
+                {/* Interactive Crop Overlay - Mobile Optimized */}
                 <div 
-                  className="absolute border-2 border-cyan-500 bg-cyan-500/10"
+                  className="absolute border-2 border-cyan-500 bg-cyan-500/10 cursor-move"
                   style={{
                     left: `${cropArea.x}%`,
                     top: `${cropArea.y}%`,
                     width: `${cropArea.width}%`,
                     height: `${cropArea.height}%`,
                   }}
+                  onMouseDown={(e) => handleCropMouseDown(e, 'move')}
                 >
                   {/* Corner handles for mobile */}
-                  <div className="absolute -top-2 -left-2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg touch-manipulation"></div>
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg touch-manipulation"></div>
-                  <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg touch-manipulation"></div>
-                  <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg touch-manipulation"></div>
+                  <div 
+                    className="absolute -top-3 -left-3 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-nw-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
+                  ></div>
+                  <div 
+                    className="absolute -top-3 -right-3 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-ne-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
+                  ></div>
+                  <div 
+                    className="absolute -bottom-3 -left-3 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-sw-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
+                  ></div>
+                  <div 
+                    className="absolute -bottom-3 -right-3 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-se-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'se')}
+                  ></div>
+                  
+                  {/* Edge handles */}
+                  <div 
+                    className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-n-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'n')}
+                  ></div>
+                  <div 
+                    className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-s-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 's')}
+                  ></div>
+                  <div 
+                    className="absolute -left-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-w-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'w')}
+                  ></div>
+                  <div 
+                    className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-cyan-500 rounded-full border-2 border-white shadow-lg cursor-e-resize touch-manipulation"
+                    onMouseDown={(e) => handleCropMouseDown(e, 'e')}
+                  ></div>
                 </div>
                 
                 {file.processed && (
@@ -744,13 +890,13 @@ export default function ImageCropperPage() {
             </div>
           </div>
 
-          {/* Canvas Content - Fixed viewport issues */}
+          {/* Canvas Content - Enhanced Interactive Crop */}
           <div className="flex-1 overflow-hidden flex items-center justify-center p-6">
             {files.map((file) => (
               <div key={file.id} className="relative max-w-full max-h-full">
                 <div 
                   ref={containerRef}
-                  className="relative bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg"
+                  className="relative bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg select-none"
                   style={{ 
                     maxWidth: '80vw',
                     maxHeight: '70vh',
@@ -760,34 +906,65 @@ export default function ImageCropperPage() {
                   <img
                     src={file.processedPreview || file.preview}
                     alt={file.name}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain pointer-events-none"
                     style={{ 
                       transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
                       transformOrigin: 'center center'
                     }}
+                    draggable={false}
                   />
                   
-                  {/* Interactive Crop Overlay */}
+                  {/* Enhanced Interactive Crop Overlay */}
                   <div 
-                    className="absolute border-2 border-cyan-500 bg-cyan-500/10 cursor-move"
+                    className="absolute border-2 border-cyan-500 bg-cyan-500/10 cursor-move select-none"
                     style={{
                       left: `${cropArea.x}%`,
                       top: `${cropArea.y}%`,
                       width: `${cropArea.width}%`,
                       height: `${cropArea.height}%`,
                     }}
+                    onMouseDown={(e) => handleCropMouseDown(e, 'move')}
                   >
-                    {/* Resize handles */}
-                    <div className="absolute -top-1 -left-1 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-nw-resize"></div>
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-ne-resize"></div>
-                    <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-sw-resize"></div>
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-se-resize"></div>
+                    {/* Corner resize handles */}
+                    <div 
+                      className="absolute -top-2 -left-2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-nw-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'nw')}
+                    ></div>
+                    <div 
+                      className="absolute -top-2 -right-2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-ne-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'ne')}
+                    ></div>
+                    <div 
+                      className="absolute -bottom-2 -left-2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-sw-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'sw')}
+                    ></div>
+                    <div 
+                      className="absolute -bottom-2 -right-2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-se-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'se')}
+                    ></div>
                     
                     {/* Edge handles */}
-                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-n-resize"></div>
-                    <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-s-resize"></div>
-                    <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-w-resize"></div>
-                    <div className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-cyan-500 border border-white rounded-full cursor-e-resize"></div>
+                    <div 
+                      className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-n-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'n')}
+                    ></div>
+                    <div 
+                      className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-s-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 's')}
+                    ></div>
+                    <div 
+                      className="absolute -left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-w-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'w')}
+                    ></div>
+                    <div 
+                      className="absolute -right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-cyan-500 border-2 border-white rounded-full cursor-e-resize hover:scale-125 transition-transform shadow-lg"
+                      onMouseDown={(e) => handleCropMouseDown(e, 'e')}
+                    ></div>
+
+                    {/* Move handle in center */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-cyan-600 rounded-full border-2 border-white shadow-lg cursor-move opacity-80 hover:opacity-100 transition-opacity">
+                      <Move className="h-3 w-3 text-white absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                    </div>
                   </div>
                   
                   {file.processed && (

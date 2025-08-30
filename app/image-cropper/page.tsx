@@ -1,84 +1,186 @@
-'use client';
+"use client"
 
-import { ImageToolsLayout } from '@/components/image-tools-layout';
+import { ImageToolsLayout } from "@/components/image-tools-layout"
+import { Crop } from "lucide-react"
+import { ImageProcessor } from "@/lib/processors/image-processor"
 
-export default function ImageCropperPage() {
-  const cropperOptions = [
-    { label: 'Square (1:1)', value: '1:1' },
-    { label: 'Portrait (3:4)', value: '3:4' },
-    { label: 'Landscape (4:3)', value: '4:3' },
-    { label: 'Widescreen (16:9)', value: '16:9' },
-    { label: 'Custom', value: 'custom' }
-  ];
+const cropOptions = [
+  {
+    key: "aspectRatio",
+    label: "Aspect Ratio",
+    type: "select" as const,
+    defaultValue: "custom",
+    selectOptions: [
+      { value: "custom", label: "Custom" },
+      { value: "1:1", label: "Square (1:1)" },
+      { value: "4:3", label: "Standard (4:3)" },
+      { value: "3:2", label: "Classic (3:2)" },
+      { value: "16:9", label: "Widescreen (16:9)" },
+      { value: "9:16", label: "Portrait (9:16)" },
+      { value: "3:4", label: "Portrait (3:4)" },
+      { value: "2:3", label: "Portrait (2:3)" },
+    ],
+    section: "Crop Settings",
+  },
+  {
+    key: "cropX",
+    label: "X Position (%)",
+    type: "slider" as const,
+    defaultValue: 25,
+    min: 0,
+    max: 75,
+    step: 1,
+    section: "Position",
+    condition: (options) => options.aspectRatio === "custom",
+  },
+  {
+    key: "cropY",
+    label: "Y Position (%)",
+    type: "slider" as const,
+    defaultValue: 25,
+    min: 0,
+    max: 75,
+    step: 1,
+    section: "Position",
+    condition: (options) => options.aspectRatio === "custom",
+  },
+  {
+    key: "cropWidth",
+    label: "Width (%)",
+    type: "slider" as const,
+    defaultValue: 50,
+    min: 10,
+    max: 100,
+    step: 1,
+    section: "Dimensions",
+    condition: (options) => options.aspectRatio === "custom",
+  },
+  {
+    key: "cropHeight",
+    label: "Height (%)",
+    type: "slider" as const,
+    defaultValue: 50,
+    min: 10,
+    max: 100,
+    step: 1,
+    section: "Dimensions",
+    condition: (options) => options.aspectRatio === "custom",
+  },
+]
 
-  const processCrop = async (file: File, options: any) => {
-    return new Promise<File>((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
+const cropPresets = [
+  { name: "Instagram Post", values: { aspectRatio: "1:1" } },
+  { name: "YouTube Thumbnail", values: { aspectRatio: "16:9" } },
+  { name: "Facebook Cover", values: { aspectRatio: "16:9" } },
+  { name: "Twitter Header", values: { aspectRatio: "3:1" } },
+  { name: "LinkedIn Post", values: { aspectRatio: "4:3" } },
+  { name: "Center Crop", values: { aspectRatio: "custom", cropX: 25, cropY: 25, cropWidth: 50, cropHeight: 50 } },
+]
 
-      img.onload = () => {
-        const { width, height } = img;
-        let cropWidth = width;
-        let cropHeight = height;
+async function cropImages(files: any[], options: any) {
+  try {
+    if (files.length === 0) {
+      return {
+        success: false,
+        error: "No files to process",
+      }
+    }
 
-        // Calculate crop dimensions based on aspect ratio
-        if (options.aspectRatio && options.aspectRatio !== 'custom') {
-          const [ratioW, ratioH] = options.aspectRatio.split(':').map(Number);
-          const targetRatio = ratioW / ratioH;
-          const currentRatio = width / height;
+    const processedFiles = await Promise.all(
+      files.map(async (file) => {
+        let cropArea = { x: 25, y: 25, width: 50, height: 50 }
 
-          if (currentRatio > targetRatio) {
-            cropWidth = height * targetRatio;
-            cropHeight = height;
-          } else {
-            cropWidth = width;
-            cropHeight = width / targetRatio;
+        // Calculate crop area based on aspect ratio
+        if (options.aspectRatio && options.aspectRatio !== "custom") {
+          const [ratioW, ratioH] = options.aspectRatio.split(":").map(Number)
+          const targetRatio = ratioW / ratioH
+          
+          if (file.dimensions) {
+            const currentRatio = file.dimensions.width / file.dimensions.height
+            
+            if (currentRatio > targetRatio) {
+              // Image is wider, crop width
+              const newWidth = (file.dimensions.height * targetRatio / file.dimensions.width) * 100
+              cropArea = {
+                x: (100 - newWidth) / 2,
+                y: 0,
+                width: newWidth,
+                height: 100
+              }
+            } else {
+              // Image is taller, crop height
+              const newHeight = (file.dimensions.width / targetRatio / file.dimensions.height) * 100
+              cropArea = {
+                x: 0,
+                y: (100 - newHeight) / 2,
+                width: 100,
+                height: newHeight
+              }
+            }
+          }
+        } else {
+          // Use custom crop area
+          cropArea = {
+            x: options.cropX || 25,
+            y: options.cropY || 25,
+            width: options.cropWidth || 50,
+            height: options.cropHeight || 50
           }
         }
 
-        // Set canvas dimensions
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
+        const processedBlob = await ImageProcessor.cropImage(
+          file.originalFile || file.file,
+          cropArea,
+          { outputFormat: "png" }
+        )
 
-        // Calculate crop position (center crop)
-        const startX = (width - cropWidth) / 2;
-        const startY = (height - cropHeight) / 2;
+        const processedUrl = URL.createObjectURL(processedBlob)
+        
+        const baseName = file.name.split(".")[0]
+        const newName = `${baseName}_cropped.png`
 
-        // Draw cropped image
-        ctx?.drawImage(
-          img,
-          startX, startY, cropWidth, cropHeight,
-          0, 0, cropWidth, cropHeight
-        );
+        // Calculate new dimensions
+        const newWidth = Math.floor((file.dimensions.width * cropArea.width) / 100)
+        const newHeight = Math.floor((file.dimensions.height * cropArea.height) / 100)
 
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const croppedFile = new File([blob], file.name, {
-              type: file.type,
-              lastModified: Date.now()
-            });
-            resolve(croppedFile);
-          } else {
-            reject(new Error('Failed to crop image'));
-          }
-        }, file.type);
-      };
+        return {
+          ...file,
+          processed: true,
+          processedPreview: processedUrl,
+          name: newName,
+          processedSize: processedBlob.size,
+          blob: processedBlob,
+          dimensions: { width: newWidth, height: newHeight }
+        }
+      })
+    )
 
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(file);
-    });
-  };
+    return {
+      success: true,
+      processedFiles,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to crop images",
+    }
+  }
+}
 
+export default function ImageCropperPage() {
   return (
     <ImageToolsLayout
       title="Image Cropper"
-      description="Crop your images to different aspect ratios or custom dimensions"
-      options={cropperOptions}
-      optionLabel="Aspect Ratio"
-      processFunction={processCrop}
-      acceptedFileTypes="image/*"
-      maxFileSize={10 * 1024 * 1024} // 10MB
+      description="Crop images to specific aspect ratios or custom dimensions with precise control over position and size."
+      icon={Crop}
+      toolType="crop"
+      processFunction={cropImages}
+      options={cropOptions}
+      maxFiles={10}
+      presets={cropPresets}
+      allowBatchProcessing={true}
+      supportedFormats={["image/jpeg", "image/png", "image/webp"]}
+      outputFormats={["jpeg", "png", "webp"]}
     />
-  );
+  )
 }

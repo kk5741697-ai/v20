@@ -40,7 +40,14 @@ const backgroundRemovalOptions = [
     label: "Detection Algorithm",
     type: "select" as const,
     defaultValue: "u2net-like",
-    selectOptions: [import { Upload, Download, CheckCircle, X, RefreshCw, ZoomIn, ZoomOut, Maximize2, Settings, Scissors, Palette, Crop, Eraser, Paintbrush, Undo, Redo, Eye, EyeOff, Layers, Bluetooth as Blur, Share as Shadow, Move, RotateCw } from "lucide-react"key: "memoryOptimized",
+    selectOptions: [
+      { value: "u2net-like", label: "U²-Net (Recommended)" },
+      { value: "grabcut", label: "GrabCut Algorithm" },
+      { value: "watershed", label: "Watershed Segmentation" },
+    ],
+  },
+  {
+    key: "memoryOptimized",
     label: "Memory Optimized (Large Images)",
     type: "checkbox" as const,
     defaultValue: true,

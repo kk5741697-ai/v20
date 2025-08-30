@@ -424,16 +424,23 @@ export function PDFToolsLayout({
           </div>
 
         
-        {/* Top Ad Banner - Responsive */}
-        <div className="bg-white">
-          <div className="container mx-auto px-4 py-2 lg:py-3">
-            <AdBanner 
-              adSlot="tool-header-banner"
-              adFormat="auto"
-              className="max-w-4xl mx-auto"
-            />
-          </div>
-        </div>
+            {/* Mobile Bottom Ad */}
+            <div className="mt-6 lg:mt-8 lg:hidden">
+              <AdBanner 
+                adSlot="mobile-upload-bottom"
+                adFormat="auto"
+                className="w-full"
+              />
+            </div>
+
+            {/* Desktop Bottom Ad */}
+            <div className="mt-8 hidden lg:block">
+              <AdBanner 
+                adSlot="upload-bottom-banner"
+                adFormat="horizontal"
+                className="max-w-2xl mx-auto"
+              />
+            </div>
 
           
           <div className="max-w-4xl mx-auto">
@@ -458,24 +465,7 @@ export function PDFToolsLayout({
                 <p className="text-xs text-gray-400">Up to {maxFiles} files • Up to 100MB each</p>
               </div>
             </div>
-
-            {/* Mobile Bottom Ad */}
-            <div className="mt-6 lg:mt-8 lg:hidden">
-              <AdBanner 
-                adSlot="mobile-upload-bottom"
-                adFormat="auto"
-                className="w-full"
-              />
-            </div>
-
-            {/* Desktop Bottom Ad */}
-            <div className="mt-8 hidden lg:block">
-              <AdBanner 
-                adSlot="upload-bottom-banner"
-                adFormat="horizontal"
-                className="max-w-2xl mx-auto"
-              />
-            </div>
+            
           </div>
         </div>
 

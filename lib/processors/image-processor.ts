@@ -559,64 +559,16 @@ export class ImageProcessor {
 
           ctx.drawImage(img, 0, 0)
 
-          // Enhanced background removal with proper sensitivity handling
+          // Advanced background removal with edge detection
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
           const data = imageData.data
 
-          // Sample multiple edge pixels to determine background color
-          const samplePoints = [
-            [0, 0], [canvas.width - 1, 0], [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1],
-            [Math.floor(canvas.width / 2), 0], [Math.floor(canvas.width / 2), canvas.height - 1],
-            [0, Math.floor(canvas.height / 2)], [canvas.width - 1, Math.floor(canvas.height / 2)]
-          ]
-
-          const bgColors = samplePoints.map(([x, y]) => {
-            const index = (y * canvas.width + x) * 4
-            return [data[index], data[index + 1], data[index + 2]]
-          })
-
-          // Find most common background color
-          const bgColor = this.findDominantBackgroundColor(bgColors)
-
-          // Enhanced sensitivity and smoothing with proper ranges
+          // Advanced multi-point background detection
+          const bgColor = this.detectBackgroundColor(data, canvas.width, canvas.height)
           const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
-          const threshold = sensitivity * 3.5
-          const smoothing = Math.max(0, Math.min(10, options.smoothing || 2))
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i]
-            const g = data[i + 1]
-            const b = data[i + 2]
-
-            const colorDistance = Math.sqrt(
-              Math.pow(r - bgColor[0], 2) + Math.pow(g - bgColor[1], 2) + Math.pow(b - bgColor[2], 2),
-            )
-
-            if (colorDistance < threshold) {
-              // Apply feathering for smoother edges if enabled
-              if (options.featherEdges) {
-                const fadeDistance = threshold * 0.4
-                if (colorDistance > threshold - fadeDistance) {
-                  const alpha = ((colorDistance - (threshold - fadeDistance)) / fadeDistance) * 255
-                  data[i + 3] = Math.min(255, alpha)
-                } else {
-                  data[i + 3] = 0 // Make transparent
-                }
-              } else {
-                data[i + 3] = 0 // Make transparent
-              }
-            } else {
-              // Preserve original alpha for non-background pixels
-              if (options.preserveDetails) {
-                data[i + 3] = Math.min(255, data[i + 3])
-              }
-            }
-          }
-
-          // Apply smoothing if enabled
-          if (smoothing > 0) {
-            this.applyEdgeSmoothing(data, canvas.width, canvas.height, smoothing)
-          }
+          
+          // Apply advanced background removal with edge detection
+          this.removeBackgroundAdvanced(data, canvas.width, canvas.height, bgColor, sensitivity, options)
 
           ctx.putImageData(imageData, 0, 0)
 
@@ -638,12 +590,51 @@ export class ImageProcessor {
     })
   }
 
-  private static findDominantBackgroundColor(colors: number[][]): number[] {
-    // Simple clustering to find most common background color
+  private static detectBackgroundColor(data: Uint8ClampedArray, width: number, height: number): number[] {
+    // Advanced background detection using multiple sampling strategies
+    const edgePixels: number[][] = []
+    const cornerWeight = 3
+    const edgeWeight = 2
+    
+    // Sample corners (higher weight)
+    const corners = [
+      [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]
+    ]
+    
+    corners.forEach(([x, y]) => {
+      const index = (y * width + x) * 4
+      const color = [data[index], data[index + 1], data[index + 2]]
+      for (let i = 0; i < cornerWeight; i++) {
+        edgePixels.push(color)
+      }
+    })
+    
+    // Sample edges (medium weight)
+    const edgePoints = [
+      ...Array.from({ length: 20 }, (_, i) => [Math.floor((width * i) / 20), 0]), // Top edge
+      ...Array.from({ length: 20 }, (_, i) => [Math.floor((width * i) / 20), height - 1]), // Bottom edge
+      ...Array.from({ length: 20 }, (_, i) => [0, Math.floor((height * i) / 20)]), // Left edge
+      ...Array.from({ length: 20 }, (_, i) => [width - 1, Math.floor((height * i) / 20)]), // Right edge
+    ]
+    
+    edgePoints.forEach(([x, y]) => {
+      const index = (y * width + x) * 4
+      const color = [data[index], data[index + 1], data[index + 2]]
+      for (let i = 0; i < edgeWeight; i++) {
+        edgePixels.push(color)
+      }
+    })
+    
+    // Find dominant color using improved clustering
+    return this.findDominantColor(edgePixels)
+  }
+  
+  private static findDominantColor(colors: number[][]): number[] {
     const colorCounts = new Map<string, { color: number[], count: number }>()
     
     colors.forEach(color => {
-      const key = `${Math.floor(color[0] / 20)}-${Math.floor(color[1] / 20)}-${Math.floor(color[2] / 20)}`
+      // Use smaller buckets for better color detection
+      const key = `${Math.floor(color[0] / 15)}-${Math.floor(color[1] / 15)}-${Math.floor(color[2] / 15)}`
       if (colorCounts.has(key)) {
         colorCounts.get(key)!.count++
       } else {
@@ -664,37 +655,116 @@ export class ImageProcessor {
     return dominantColor
   }
 
-  private static applyEdgeSmoothing(data: Uint8ClampedArray, width: number, height: number, intensity: number): void {
-    const smoothedData = new Uint8ClampedArray(data)
+  private static removeBackgroundAdvanced(
+    data: Uint8ClampedArray, 
+    width: number, 
+    height: number, 
+    bgColor: number[], 
+    sensitivity: number, 
+    options: ImageProcessingOptions
+  ): void {
+    const threshold = sensitivity * 2.5
+    const edgeMap = new Uint8Array(width * height)
     
+    // First pass: Edge detection
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
-        const index = (y * width + x) * 4
+        const idx = y * width + x
+        const pixelIdx = idx * 4
         
-        // Only smooth alpha channel for edge pixels
-        if (data[index + 3] > 0 && data[index + 3] < 255) {
-          let alphaSum = 0
-          let count = 0
-          
-          // Sample surrounding pixels
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const neighborIndex = ((y + dy) * width + (x + dx)) * 4
-              alphaSum += data[neighborIndex + 3]
-              count++
-            }
+        // Calculate gradient magnitude for edge detection
+        let gradientX = 0, gradientY = 0
+        
+        // Sobel operator for edge detection
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const neighborIdx = ((y + dy) * width + (x + dx)) * 4
+            const intensity = (data[neighborIdx] + data[neighborIdx + 1] + data[neighborIdx + 2]) / 3
+            
+            // Sobel X kernel
+            const sobelX = dx === -1 ? -1 : dx === 1 ? 1 : 0
+            gradientX += intensity * sobelX
+            
+            // Sobel Y kernel  
+            const sobelY = dy === -1 ? -1 : dy === 1 ? 1 : 0
+            gradientY += intensity * sobelY
           }
-          
-          const avgAlpha = alphaSum / count
-          const smoothingFactor = intensity / 10
-          smoothedData[index + 3] = Math.round(data[index + 3] * (1 - smoothingFactor) + avgAlpha * smoothingFactor)
         }
+        
+        const gradientMagnitude = Math.sqrt(gradientX * gradientX + gradientY * gradientY)
+        edgeMap[idx] = gradientMagnitude > threshold * 0.3 ? 1 : 0
       }
     }
     
-    // Copy smoothed data back
-    for (let i = 0; i < data.length; i++) {
-      data[i] = smoothedData[i]
+    // Second pass: Background removal with edge awareness
+    for (let i = 0; i < data.length; i += 4) {
+      const pixelIdx = Math.floor(i / 4)
+      const x = pixelIdx % width
+      const y = Math.floor(pixelIdx / width)
+      
+      const r = data[i]
+      const g = data[i + 1]
+      const b = data[i + 2]
+
+      // Calculate color distance from background
+      const colorDistance = Math.sqrt(
+        Math.pow(r - bgColor[0], 2) + 
+        Math.pow(g - bgColor[1], 2) + 
+        Math.pow(b - bgColor[2], 2)
+      )
+
+      if (colorDistance < threshold) {
+        if (options.featherEdges && edgeMap[pixelIdx]) {
+          // Apply feathering for edge pixels
+          const fadeDistance = threshold * 0.4
+          if (colorDistance > threshold - fadeDistance) {
+            const alpha = ((colorDistance - (threshold - fadeDistance)) / fadeDistance) * 255
+            data[i + 3] = Math.min(255, alpha)
+          } else {
+            data[i + 3] = 0
+          }
+        } else {
+          data[i + 3] = 0 // Make transparent
+        }
+      } else if (options.preserveDetails && edgeMap[pixelIdx]) {
+        // Enhance edge details
+        data[i + 3] = Math.min(255, data[i + 3] * 1.1)
+      }
+    }
+    
+    // Third pass: Smoothing if enabled
+    if (options.smoothing && options.smoothing > 0) {
+      const smoothedData = new Uint8ClampedArray(data)
+      
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const index = (y * width + x) * 4
+          
+          // Only smooth alpha channel for edge pixels
+          if (data[index + 3] > 0 && data[index + 3] < 255) {
+            let alphaSum = 0
+            let count = 0
+            
+            // Sample surrounding pixels
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const neighborIndex = ((y + dy) * width + (x + dx)) * 4
+                alphaSum += data[neighborIndex + 3]
+                count++
+              }
+            }
+            
+            const avgAlpha = alphaSum / count
+            const smoothingFactor = options.smoothing / 10
+            smoothedData[index + 3] = Math.round(data[index + 3] * (1 - smoothingFactor) + avgAlpha * smoothingFactor)
+          }
+        }
+      }
+      
+      // Copy smoothed alpha channel back
+      for (let i = 3; i < data.length; i += 4) {
+        data[i] = smoothedData[i]
+      }
     }
   }
 

@@ -92,7 +92,7 @@ export function AdBanner({
         data-ad-format={mobileOptimized && isMobile ? "fluid" : adFormat}
         data-full-width-responsive={fullWidthResponsive.toString()}
         data-ad-channel={isMobile ? "mobile" : "desktop"}
-        data-adtest="on"
+        data-adtest={process.env.NODE_ENV === "development" ? "on" : "off"}
       />
     </div>
   )

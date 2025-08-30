@@ -13,7 +13,6 @@ const backgroundRemovalOptions = [
     min: 10,
     max: 100,
     step: 5,
-    section: "Detection",
   },
   {
     key: "smoothing",
@@ -23,21 +22,18 @@ const backgroundRemovalOptions = [
     min: 0,
     max: 10,
     step: 1,
-    section: "Detection",
   },
   {
     key: "featherEdges",
     label: "Feather Edges",
     type: "checkbox" as const,
     defaultValue: true,
-    section: "Enhancement",
   },
   {
     key: "preserveDetails",
     label: "Preserve Fine Details",
     type: "checkbox" as const,
     defaultValue: true,
-    section: "Enhancement",
   },
 ]
 

@@ -87,19 +87,65 @@ export default function RootLayout({
         <Script id="adsense-init" strategy="afterInteractive">
           {`
             (function() {
+              // Handle SPA navigation for AdSense
+              let currentPath = window.location.pathname;
+              
               function initAdsense() {
                 try {
-                  (window.adsbygoogle = window.adsbygoogle || []).push({
-                    google_ad_client: "ca-pub-4755003409431265",
-                    enable_page_level_ads: true,
-                    overlays: {
-                      bottom: true
+                  // Initialize AdSense for SPA
+                  window.adsbygoogle = window.adsbygoogle || [];
+                  
+                  // Push existing ads on page
+                  const ads = document.querySelectorAll('.adsbygoogle:not([data-adsbygoogle-status])');
+                  ads.forEach(() => {
+                    try {
+                      window.adsbygoogle.push({});
+                    } catch (e) {
+                      console.warn('AdSense push failed:', e);
                     }
                   });
+                  
+                  // Initialize auto ads only once
+                  if (!window.autoAdsInitialized) {
+                    window.adsbygoogle.push({
+                      google_ad_client: "ca-pub-4755003409431265",
+                      enable_page_level_ads: true,
+                      overlays: { bottom: false }, // Disable overlay ads for tools
+                      page_level_ads: {
+                        enabled: true
+                      }
+                    });
+                    window.autoAdsInitialized = true;
+                  }
                 } catch (e) {
                   console.warn('AdSense initialization failed:', e);
                 }
               }
+              
+              // Handle route changes for SPA
+              function handleRouteChange() {
+                if (window.location.pathname !== currentPath) {
+                  currentPath = window.location.pathname;
+                  setTimeout(initAdsense, 100);
+                }
+              }
+              
+              // Listen for navigation changes
+              window.addEventListener('popstate', handleRouteChange);
+              
+              // Override pushState and replaceState for programmatic navigation
+              const originalPushState = history.pushState;
+              const originalReplaceState = history.replaceState;
+              
+              history.pushState = function(...args) {
+                originalPushState.apply(history, args);
+                handleRouteChange();
+              };
+              
+              history.replaceState = function(...args) {
+                originalReplaceState.apply(history, args);
+                handleRouteChange();
+              };
               
               if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', initAdsense);

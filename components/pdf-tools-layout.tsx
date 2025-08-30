@@ -425,7 +425,7 @@ export function PDFToolsLayout({
 
         
             {/* Mobile Bottom Ad */}
-            <div className="mt-6 lg:mb-8 lg:hidden">
+            <div className="mb-6 lg:mb-8 lg:hidden">
               <AdBanner 
                 adSlot="mobile-upload-bottom"
                 adFormat="auto"

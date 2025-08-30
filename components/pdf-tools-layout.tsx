@@ -511,7 +511,7 @@ export function PDFToolsLayout({
         </div>
 
       {/* Top Ad Banner */}
-      <div className="bg-white border-b">
+      <div className="bg-white">
         <div className="container mx-auto px-4 py-1 lg:py-2">
           <AdBanner 
             adSlot="tool-header-banner"
@@ -670,7 +670,7 @@ export function PDFToolsLayout({
             <ScrollArea className="h-full">
 
             {/* Top Ad Banner */}
-            <div className="bg-white border-b">
+            <div className="bg-white">
               <div className="container mx-auto px-4 py-1 lg:py-2">
                 <AdBanner 
                   adSlot="tool-header-banner"

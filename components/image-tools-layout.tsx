@@ -524,6 +524,7 @@ export function ImageToolsLayout({
   if (showUploadArea && files.length === 0) {
     return (
       <div className="min-h-screen bg-background">
+        <Header />
         
         <div className="container mx-auto px-4 py-6 lg:py-8">
           <div className="text-center mb-6 lg:mb-8">
@@ -589,16 +590,7 @@ export function ImageToolsLayout({
     <div className="min-h-screen bg-background">
       <Header />
       
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-1 lg:py-2">
-          <AdBanner 
-            adSlot="tool-header-banner"
-            adFormat="auto"
-            className="max-w-6xl mx-auto"
-            mobileOptimized={true}
-          />
-        </div>
-      </div>
+      
 
       {/* Mobile Layout */}
       <div className="lg:hidden">
@@ -670,15 +662,6 @@ export function ImageToolsLayout({
                 </CardContent>
               </Card>
             ))}
-          </div>
-
-          <div className="mt-6">
-            <AdBanner 
-              adSlot="mobile-image-canvas"
-              adFormat="auto"
-              className="w-full"
-              mobileOptimized={true}
-            />
           </div>
         </div>
 

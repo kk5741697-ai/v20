@@ -413,6 +413,16 @@ export function PDFToolsLayout({
     return (
       <div className="min-h-screen bg-background">
         <Header />
+
+        <div className="container mx-auto px-4 py-6 lg:py-8">
+          <div className="text-center mb-6 lg:mb-8">
+            <div className="inline-flex items-center space-x-2 mb-4">
+              <Icon className="h-6 w-6 lg:h-8 lg:w-8 text-red-600" />
+              <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">{title}</h1>
+            </div>
+            <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">{description}</p>
+          </div>
+
         
         {/* Top Ad Banner - Responsive */}
         <div className="bg-white border-b">
@@ -425,16 +435,8 @@ export function PDFToolsLayout({
           </div>
         </div>
 
-        <div className="container mx-auto px-4 py-6 lg:py-8">
-          <div className="text-center mb-6 lg:mb-8">
-            <div className="inline-flex items-center space-x-2 mb-4">
-              <Icon className="h-6 w-6 lg:h-8 lg:w-8 text-red-600" />
-              <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">{title}</h1>
-            </div>
-            <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">{description}</p>
-          </div>
-
-          <div className="max-w-2xl mx-auto">
+          
+          <div className="max-w-4xl mx-auto">
             <div 
               className="border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-red-400 hover:bg-red-50/30 transition-all duration-300 p-8 lg:p-16 group"
               onDrop={handleDrop}

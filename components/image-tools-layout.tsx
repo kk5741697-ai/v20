@@ -612,7 +612,16 @@ export function ImageToolsLayout({
             </Button>
           </div>
         </div>
-
+<div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+            mobileOptimized={true}
+          />
+        </div>
+      </div>
         <div className="p-4 space-y-4 min-h-[60vh] pb-24">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {files.map((file) => (

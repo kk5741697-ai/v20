@@ -48,6 +48,13 @@ const backgroundRemovalOptions = [
   },
   {
     key: "memoryOptimized",
+      { value: "u2net-like", label: "U²-Net (Recommended)" },
+      { value: "grabcut", label: "GrabCut Algorithm" },
+      { value: "watershed", label: "Watershed Segmentation" },
+    ],
+  },
+  {
+    key: "memoryOptimized",
     label: "Memory Optimized (Large Images)",
     type: "checkbox" as const,
     defaultValue: true,

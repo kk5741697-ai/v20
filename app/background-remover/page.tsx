@@ -2,7 +2,7 @@
 
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Scissors } from "lucide-react"
-import { ImageProcessor } from "@/lib/processors/image-processor"
+import { AdvancedImageProcessor } from "@/lib/processors/advanced-image-processor"
 
 const backgroundRemovalOptions = [
   {
@@ -39,13 +39,19 @@ const backgroundRemovalOptions = [
     key: "algorithm",
     label: "Detection Algorithm",
     type: "select" as const,
-    defaultValue: "hybrid",
+    defaultValue: "u2net-like",
     selectOptions: [
-      { value: "auto", label: "Auto (Recommended)" },
-      { value: "hybrid", label: "Hybrid (Best Quality)" },
+      { value: "u2net-like", label: "U²Net-like (Best Quality)" },
+      { value: "modnet-like", label: "MODNet-like (Portraits)" },
+      { value: "hybrid", label: "Hybrid (Balanced)" },
       { value: "edge-detection", label: "Edge Detection" },
-      { value: "color-clustering", label: "Color Clustering" },
     ],
+  },
+  {
+    key: "memoryOptimized",
+    label: "Memory Optimized (Large Images)",
+    type: "checkbox" as const,
+    defaultValue: true,
   },
 ]
 
@@ -53,9 +59,14 @@ async function removeBackground(files: any[], options: any) {
   try {
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        const processedBlob = await ImageProcessor.removeBackground(file.originalFile || file.file, {
-          ...options,
-          outputFormat: "png", // Always PNG for transparency
+        const processedBlob = await AdvancedImageProcessor.removeBackgroundAdvanced(file.originalFile || file.file, {
+          sensitivity: options.sensitivity || 25,
+          featherEdges: Boolean(options.featherEdges),
+          preserveDetails: Boolean(options.preserveDetails),
+          smoothing: options.smoothing || 3,
+          algorithm: options.algorithm || "u2net-like",
+          maxDimensions: { width: 2048, height: 2048 },
+          memoryOptimized: Boolean(options.memoryOptimized),
         })
 
         const processedUrl = URL.createObjectURL(processedBlob)
@@ -99,7 +110,7 @@ export default function BackgroundRemoverPage() {
       maxFiles={5}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
-      outputFormats={["png"]}
+      outputFormats={["png", "webp"]}
     />
   )
 }

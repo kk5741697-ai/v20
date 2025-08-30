@@ -105,12 +105,22 @@ export function ImageToolsLayout({
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
 
-    // Check for large files and warn user
-    const largeFiles = Array.from(uploadedFiles).filter(file => file.size > 10 * 1024 * 1024)
+    // Enhanced file size checking with better warnings
+    const largeFiles = Array.from(uploadedFiles).filter(file => file.size > 15 * 1024 * 1024)
+    const veryLargeFiles = Array.from(uploadedFiles).filter(file => file.size > 25 * 1024 * 1024)
+    
     if (largeFiles.length > 0) {
       toast({
-        title: "Large files detected",
-        description: `${largeFiles.length} file(s) are larger than 10MB. Processing may take longer and use more memory.`,
+        title: "Large files detected", 
+        description: `${largeFiles.length} file(s) are larger than 15MB. Processing will be memory-optimized but may take longer.`,
+      })
+    }
+    
+    if (veryLargeFiles.length > 0) {
+      toast({
+        title: "Very large files detected",
+        description: `${veryLargeFiles.length} file(s) are larger than 25MB. These will be automatically downscaled for processing to prevent crashes.`,
+        variant: "destructive"
       })
     }
 

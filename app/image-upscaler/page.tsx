@@ -2,7 +2,7 @@
 
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { ZoomIn } from "lucide-react"
-import { ImageProcessor } from "@/lib/processors/image-processor"
+import { AdvancedImageProcessor } from "@/lib/processors/advanced-image-processor"
 
 const upscaleOptions = [
   {
@@ -22,12 +22,12 @@ const upscaleOptions = [
     key: "algorithm",
     label: "Upscaling Algorithm",
     type: "select" as const,
-    defaultValue: "lanczos",
+    defaultValue: "esrgan-like",
     selectOptions: [
-      { value: "nearest", label: "Nearest Neighbor (Fast)" },
-      { value: "bilinear", label: "Bilinear (Balanced)" },
-      { value: "bicubic", label: "Bicubic (High Quality)" },
-      { value: "lanczos", label: "Lanczos (Best Quality)" },
+      { value: "lanczos", label: "Lanczos (Fast)" },
+      { value: "bicubic", label: "Bicubic (Balanced)" },
+      { value: "esrgan-like", label: "ESRGAN-like (Best Quality)" },
+      { value: "super-resolution", label: "Super Resolution (Experimental)" },
     ],
     section: "Quality",
   },
@@ -49,7 +49,7 @@ const upscaleOptions = [
     key: "sharpen",
     label: "Sharpening",
     type: "slider" as const,
-    defaultValue: 25,
+    defaultValue: 40,
     min: 0,
     max: 100,
     step: 5,
@@ -66,11 +66,23 @@ const upscaleOptions = [
     key: "quality",
     label: "Output Quality",
     type: "slider" as const,
-    defaultValue: 98,
-    min: 80,
+    defaultValue: 95,
+    min: 85,
     max: 100,
     step: 1,
     section: "Output",
+  },
+  {
+    key: "tileSize",
+    label: "Processing Tile Size",
+    type: "select" as const,
+    defaultValue: "512",
+    selectOptions: [
+      { value: "256", label: "256px (Memory Safe)" },
+      { value: "512", label: "512px (Balanced)" },
+      { value: "1024", label: "1024px (High Quality)" },
+    ],
+    section: "Performance",
   },
 ]
 
@@ -96,10 +108,12 @@ async function upscaleImages(files: any[], options: any) {
           reduceNoise: Boolean(options.reduceNoise),
           sharpen: options.sharpen || 0,
           autoOptimize: Boolean(options.autoOptimize),
-          outputFormat: "png", // Always PNG for best quality
+          tileSize: parseInt(options.tileSize || "512"),
+          maxDimensions: { width: 4096, height: 4096 },
+          memoryOptimized: true,
         }
 
-        const processedBlob = await ImageProcessor.upscaleImage(
+        const processedBlob = await AdvancedImageProcessor.upscaleImageAdvanced(
           file.originalFile || file.file,
           upscaleOptions
         )
@@ -151,7 +165,7 @@ export default function ImageUpscalerPage() {
       maxFiles={5}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
-      outputFormats={["png"]}
+      outputFormats={["png", "jpeg", "webp"]}
     />
   )
 }

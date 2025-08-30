@@ -1,5 +1,5 @@
 // Enhanced image processing utilities with improved algorithms and performance
-import { AIBackgroundRemover } from "@/lib/ai-background-remover"
+import { AdvancedImageProcessor } from "./advanced-image-processor"
 
 export interface ImageProcessingOptions {
   quality?: number
@@ -50,199 +50,43 @@ export interface ImageProcessingOptions {
 export class ImageProcessor {
   // Improved upscaling with better algorithms and sharpening
   static async upscaleImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", { 
-        alpha: true,
-        willReadFrequently: false,
-        desynchronized: true
-      })
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
+    // Parse scale factor
+    let scaleFactor = 2
+    if (typeof options.scaleFactor === "string") {
+      scaleFactor = parseFloat(options.scaleFactor.replace('x', ''))
+    } else if (typeof options.scaleFactor === "number") {
+      scaleFactor = options.scaleFactor
+    }
+
+    // Use advanced processor for better results
+    return AdvancedImageProcessor.upscaleImageAdvanced(file, {
+      scaleFactor,
+      algorithm: options.algorithm || "esrgan-like",
+      enhanceDetails: options.enhanceDetails,
+      reduceNoise: options.reduceNoise,
+      sharpen: options.sharpen,
+      maxDimensions: { width: 4096, height: 4096 },
+      memoryOptimized: true,
+      progressCallback: (progress) => {
+        // Could emit progress events here
       }
-
-      const img = new Image()
-      img.onload = () => {
-        try {
-          // Parse scale factor
-          let scaleFactor = 2
-          if (typeof options.scaleFactor === "string") {
-            scaleFactor = parseFloat(options.scaleFactor.replace('x', ''))
-          } else if (typeof options.scaleFactor === "number") {
-            scaleFactor = options.scaleFactor
-          }
-
-          // Limit scale factor for performance
-          scaleFactor = Math.min(scaleFactor, 4)
-
-          const targetWidth = Math.round(img.naturalWidth * scaleFactor)
-          const targetHeight = Math.round(img.naturalHeight * scaleFactor)
-
-          canvas.width = targetWidth
-          canvas.height = targetHeight
-
-          // Advanced upscaling with multiple passes for better quality
-          if (scaleFactor > 2) {
-            // Multi-pass upscaling for better results
-            const intermediateCanvas = document.createElement("canvas")
-            const intermediateCtx = intermediateCanvas.getContext("2d")!
-            
-            // First pass: 2x upscale
-            intermediateCanvas.width = img.naturalWidth * 2
-            intermediateCanvas.height = img.naturalHeight * 2
-            
-            intermediateCtx.imageSmoothingEnabled = true
-            intermediateCtx.imageSmoothingQuality = "high"
-            intermediateCtx.drawImage(img, 0, 0, intermediateCanvas.width, intermediateCanvas.height)
-            
-            // Apply sharpening to intermediate result
-            this.applySharpeningFilter(intermediateCtx, intermediateCanvas, 0.3)
-            
-            // Second pass: scale to final size
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(intermediateCanvas, 0, 0, targetWidth, targetHeight)
-          } else {
-            // Single pass for 2x or less
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
-          }
-
-          // Apply advanced post-processing for better quality
-          if (options.enhanceDetails !== false) {
-            this.applyAdvancedSharpening(ctx, canvas, scaleFactor)
-          }
-
-          if (options.reduceNoise) {
-            this.applyNoiseReduction(ctx, canvas)
-          }
-
-          // Apply additional sharpening if specified
-          if (options.sharpen && options.sharpen > 0) {
-            this.applySharpeningFilter(ctx, canvas, options.sharpen / 100)
-          }
-
-          // Apply edge enhancement for upscaled images
-          this.applyEdgeEnhancement(ctx, canvas, scaleFactor)
-
-          const quality = Math.max(0.9, Math.min(1.0, (options.quality || 98) / 100))
-          const mimeType = `image/${options.outputFormat || "png"}`
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            },
-            mimeType,
-            quality,
-          )
-        } catch (error) {
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(file)
     })
   }
 
   // Improved background removal with better performance for large images
   static async removeBackground(file: File, options: ImageProcessingOptions): Promise<Blob> {
-    return new Promise((resolve, reject) => {
-      // Check file size and optimize for large images
-      const maxSafeSize = 25 * 1024 * 1024 // 25MB
-      const shouldOptimize = file.size > maxSafeSize
-
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", { 
-        alpha: true,
-        willReadFrequently: true,
-        desynchronized: true
-      })
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
+    // Use advanced processor with memory protection
+    return AdvancedImageProcessor.removeBackgroundAdvanced(file, {
+      sensitivity: options.sensitivity,
+      featherEdges: options.featherEdges,
+      preserveDetails: options.preserveDetails,
+      smoothing: options.smoothing,
+      algorithm: "u2net-like",
+      maxDimensions: { width: 2048, height: 2048 }, // Prevent crashes
+      memoryOptimized: true,
+      progressCallback: (progress) => {
+        // Could emit progress events here
       }
-
-      const img = new Image()
-      img.onload = () => {
-        try {
-          let workingWidth = img.naturalWidth
-          let workingHeight = img.naturalHeight
-
-          // Optimize large images to prevent browser crashes
-          if (shouldOptimize) {
-            const maxDimension = 2048
-            if (workingWidth > maxDimension || workingHeight > maxDimension) {
-              const scale = maxDimension / Math.max(workingWidth, workingHeight)
-              workingWidth = Math.floor(workingWidth * scale)
-              workingHeight = Math.floor(workingHeight * scale)
-            }
-          }
-
-          canvas.width = workingWidth
-          canvas.height = workingHeight
-
-          // Draw image at working resolution
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = "high"
-          ctx.drawImage(img, 0, 0, workingWidth, workingHeight)
-
-          // Get image data for processing
-          const imageData = ctx.getImageData(0, 0, workingWidth, workingHeight)
-          const data = imageData.data
-
-          // Advanced background detection with multiple sampling points
-          const bgColor = this.detectBackgroundColorAdvanced(data, workingWidth, workingHeight)
-          const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
-          
-          // Apply improved background removal algorithm
-          this.removeBackgroundAdvanced(data, workingWidth, workingHeight, bgColor, sensitivity, options)
-          
-          // Put processed data back
-          ctx.putImageData(imageData, 0, 0)
-
-          // If we downscaled for processing, upscale back to original size
-          if (shouldOptimize && (workingWidth !== img.naturalWidth || workingHeight !== img.naturalHeight)) {
-            const finalCanvas = document.createElement("canvas")
-            const finalCtx = finalCanvas.getContext("2d")!
-            finalCanvas.width = img.naturalWidth
-            finalCanvas.height = img.naturalHeight
-            
-            finalCtx.imageSmoothingEnabled = true
-            finalCtx.imageSmoothingQuality = "high"
-            finalCtx.drawImage(canvas, 0, 0, img.naturalWidth, img.naturalHeight)
-            
-            finalCanvas.toBlob((blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            }, "image/png", 0.95)
-          } else {
-            canvas.toBlob((blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            }, "image/png", 0.95)
-          }
-        } catch (error) {
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(file)
     })
   }
 
@@ -455,10 +299,10 @@ export class ImageProcessor {
             Math.pow(color[1] - centroid[1], 2) +
             Math.pow(color[2] - centroid[2], 2)
           )
-          
+      if (file.size > 30 * 1024 * 1024) {
           if (distance < minDistance) {
             minDistance = distance
-            bestCluster = index
+          description: `${file.name} is ${Math.round(file.size / (1024 * 1024))}MB. Processing will be memory-optimized to prevent crashes.`,
           }
         })
         

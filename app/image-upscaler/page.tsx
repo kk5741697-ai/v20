@@ -9,12 +9,63 @@ const upscaleOptions = [
     key: "scaleFactor",
     label: "Scale Factor",
     type: "select" as const,
-    defaultValue: "2x",
+    defaultValue: "2.0",
     selectOptions: [
-      { value: "1.5x", label: "1.5x (150%)" },
-      { value: "2x", label: "2x (200%)" },
-      { value: "2.5x", label: "2.5x (250%)" },
+      { value: "1.5", label: "1.5x (150%)" },
+      { value: "2.0", label: "2x (200%)" },
+      { value: "2.5", label: "2.5x (250%)" },
+      { value: "3.0", label: "3x (300%)" },
+      { value: "4.0", label: "4x (400%)" },
     ],
+    section: "Settings",
+  },
+  {
+    key: "algorithm",
+    label: "Upscaling Algorithm",
+    type: "select" as const,
+    defaultValue: "auto",
+    selectOptions: [
+      { value: "auto", label: "Auto (Recommended)" },
+      { value: "lanczos", label: "Lanczos (Sharp Details)" },
+      { value: "bicubic", label: "Bicubic (Smooth)" },
+      { value: "super-resolution", label: "Super Resolution (Best Quality)" },
+      { value: "waifu2x", label: "Waifu2x (Anime/Art)" },
+      { value: "esrgan", label: "ESRGAN (Photo Enhancement)" },
+    ],
+    section: "Algorithm",
+  },
+  {
+    key: "enhanceDetails",
+    label: "Enhance Details",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Enhancement",
+  },
+  {
+    key: "reduceNoise",
+    label: "Reduce Noise",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Enhancement",
+  },
+  {
+    key: "sharpen",
+    label: "Sharpening",
+    type: "slider" as const,
+    defaultValue: 25,
+    min: 0,
+    max: 100,
+    step: 5,
+    section: "Enhancement",
+  },
+  {
+    key: "quality",
+    label: "Output Quality",
+    type: "slider" as const,
+    defaultValue: 95,
+    min: 70,
+    max: 100,
+    step: 5,
     section: "Settings",
   },
 ]
@@ -30,19 +81,21 @@ async function upscaleImages(files: any[], options: any) {
 
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        // Parse scale factor
-        const scaleFactorStr = options.scaleFactor || "2x"
-        const scaleFactor = parseFloat(scaleFactorStr.replace('x', ''))
+        const scaleFactor = parseFloat(options.scaleFactor || "2.0")
         
         const upscaleOptions = {
           scaleFactor,
-          algorithm: "auto", // Always use auto for best results
-          enhanceDetails: true,
-          reduceNoise: true,
-          sharpen: 25,
-          autoOptimize: true,
-          maxDimensions: { width: 2048, height: 2048 }, // Safer limits
+          algorithm: options.algorithm || "auto",
+          enhanceDetails: options.enhanceDetails !== false,
+          reduceNoise: options.reduceNoise !== false,
+          sharpen: options.sharpen || 25,
+          quality: options.quality || 95,
+          autoOptimize: options.algorithm === "auto",
+          maxDimensions: { width: 3072, height: 3072 },
           memoryOptimized: true,
+          progressCallback: (progress: number) => {
+            console.log(`Upscaling: ${Math.round(progress)}%`)
+          }
         }
 
         const processedBlob = await AdvancedImageProcessor.upscaleImageAdvanced(
@@ -53,7 +106,7 @@ async function upscaleImages(files: any[], options: any) {
         const processedUrl = URL.createObjectURL(processedBlob)
         
         const baseName = file.name.split(".")[0]
-        const newName = `${baseName}_${scaleFactorStr}_upscaled.png`
+        const newName = `${baseName}_${scaleFactor}x_upscaled.png`
 
         // Calculate new dimensions
         const newDimensions = file.dimensions ? {
@@ -89,12 +142,12 @@ export default function ImageUpscalerPage() {
   return (
     <ImageToolsLayout
       title="Image Upscaler"
-      description="Automatically enlarge images with AI-enhanced quality. Smart algorithm selection and automatic optimization for best results without complexity."
+      description="Enlarge images with advanced AI algorithms. Choose from specialized models for different content types including photos, art, and graphics."
       icon={ZoomIn}
       toolType="upscale"
       processFunction={upscaleImages}
       options={upscaleOptions}
-      maxFiles={3}
+      maxFiles={5}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "jpeg", "webp"]}

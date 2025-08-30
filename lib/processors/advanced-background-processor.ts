@@ -1,6 +1,6 @@
-// Professional background removal processor with improved algorithms
+// Professional background removal processor with object detection and specialized models
 export interface BackgroundRemovalOptions {
-  algorithm?: "auto" | "portrait" | "object" | "precise"
+  algorithm?: "auto" | "portrait" | "object" | "animal" | "product" | "general"
   sensitivity?: number
   featherEdges?: boolean
   preserveDetails?: boolean
@@ -15,10 +15,15 @@ export interface ProcessingResult {
   processedBlob: Blob
   maskData?: ImageData
   originalImageData?: ImageData
+  detectedObjects?: Array<{
+    type: string
+    confidence: number
+    bbox: { x: number; y: number; width: number; height: number }
+  }>
 }
 
 export class AdvancedBackgroundProcessor {
-  private static readonly MAX_SAFE_PIXELS = 1024 * 1024 // Reduced for stability
+  private static readonly MAX_SAFE_PIXELS = 2048 * 2048 // Increased for better quality
   
   static async removeBackground(
     file: File, 
@@ -29,9 +34,9 @@ export class AdvancedBackgroundProcessor {
     try {
       progressCallback?.(5, "Loading image...")
       
-      // Strict memory safety checks
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        throw new Error("Image too large. Please use an image smaller than 10MB.")
+      // Enhanced file size limits
+      if (file.size > 15 * 1024 * 1024) { // 15MB limit
+        throw new Error("Image too large. Please use an image smaller than 15MB.")
       }
 
       const canvas = document.createElement("canvas")
@@ -46,10 +51,10 @@ export class AdvancedBackgroundProcessor {
       }
 
       const img = await this.loadImage(file)
-      progressCallback?.(15, "Analyzing image...")
+      progressCallback?.(15, "Analyzing image content...")
       
-      // Calculate safe working dimensions
-      const { workingWidth, workingHeight } = this.calculateSafeDimensions(
+      // Enhanced dimension calculation
+      const { workingWidth, workingHeight } = this.calculateOptimalDimensions(
         img.naturalWidth, 
         img.naturalHeight,
         options.maxDimensions
@@ -58,35 +63,42 @@ export class AdvancedBackgroundProcessor {
       canvas.width = workingWidth
       canvas.height = workingHeight
       
-      // Draw image at safe resolution
+      // Draw image at optimal resolution
       ctx.imageSmoothingEnabled = true
       ctx.imageSmoothingQuality = "high"
       ctx.drawImage(img, 0, 0, workingWidth, workingHeight)
       
-      progressCallback?.(25, "Detecting subject...")
+      progressCallback?.(25, "Detecting objects and subjects...")
       
       // Get image data for processing
       const imageData = ctx.getImageData(0, 0, workingWidth, workingHeight)
       
-      progressCallback?.(40, "Removing background...")
+      // Detect objects first for better algorithm selection
+      const detectedObjects = await this.detectObjects(imageData, options.algorithm)
       
-      // Apply improved background removal with automatic algorithm selection
-      await this.processBackgroundRemovalAuto(imageData, options, progressCallback)
+      progressCallback?.(40, "Applying specialized background removal...")
       
-      progressCallback?.(80, "Applying transparency...")
+      // Apply model-specific background removal
+      await this.processWithSpecializedModel(imageData, options, detectedObjects, progressCallback)
+      
+      progressCallback?.(80, "Refining edges and transparency...")
+      
+      // Enhanced post-processing
+      await this.applyAdvancedPostProcessing(imageData, options)
       
       // Put processed data back
       ctx.putImageData(imageData, 0, 0)
       
       progressCallback?.(95, "Finalizing...")
       
-      // Create final blob
-      const processedBlob = await this.canvasToBlob(canvas, `image/${options.outputFormat || "png"}`, 0.95)
+      // Create final blob with better quality
+      const processedBlob = await this.canvasToBlob(canvas, `image/${options.outputFormat || "png"}`, 0.98)
       
       progressCallback?.(100, "Complete!")
       
       return {
-        processedBlob
+        processedBlob,
+        detectedObjects
       }
       
     } catch (error) {
@@ -105,13 +117,13 @@ export class AdvancedBackgroundProcessor {
     })
   }
 
-  private static calculateSafeDimensions(
+  private static calculateOptimalDimensions(
     originalWidth: number, 
     originalHeight: number,
     maxDimensions?: { width: number; height: number }
   ) {
-    const maxWidth = maxDimensions?.width || 1024
-    const maxHeight = maxDimensions?.height || 1024
+    const maxWidth = maxDimensions?.width || 1536
+    const maxHeight = maxDimensions?.height || 1536
     const totalPixels = originalWidth * originalHeight
     
     let workingWidth = originalWidth
@@ -134,46 +146,71 @@ export class AdvancedBackgroundProcessor {
     return { workingWidth, workingHeight }
   }
 
-  private static async processBackgroundRemovalAuto(
+  private static async detectObjects(
     imageData: ImageData,
-    options: BackgroundRemovalOptions,
-    progressCallback?: (progress: number, stage: string) => void
-  ): Promise<void> {
-    const { width, height, data } = imageData
+    modelType?: string
+  ): Promise<Array<{
+    type: string
+    confidence: number
+    bbox: { x: number; y: number; width: number; height: number }
+  }>> {
+    const { data, width, height } = imageData
+    const detectedObjects = []
     
-    progressCallback?.(45, "Analyzing image structure...")
+    // Enhanced object detection based on color patterns and shapes
+    const analysis = this.analyzeImageContent(data, width, height)
     
-    // Automatic algorithm selection based on image analysis
-    const imageAnalysis = this.analyzeImageAdvanced(data, width, height)
-    
-    progressCallback?.(55, "Applying smart background removal...")
-    
-    // Use the most effective algorithm based on image content
-    if (imageAnalysis.hasPortrait && imageAnalysis.skinToneRatio > 0.05) {
-      await this.smartPortraitRemoval(data, width, height, options)
-    } else if (imageAnalysis.hasDistinctSubject) {
-      await this.smartSubjectRemoval(data, width, height, options)
-    } else {
-      await this.smartEdgeBasedRemoval(data, width, height, options)
+    // Detect human/portrait
+    if (analysis.skinToneRatio > 0.03 || analysis.faceFeatures > 0.02) {
+      detectedObjects.push({
+        type: "person",
+        confidence: Math.min(0.95, analysis.skinToneRatio * 20 + analysis.faceFeatures * 30),
+        bbox: this.findPersonBoundingBox(data, width, height)
+      })
     }
     
-    // Always apply post-processing for better results
-    progressCallback?.(70, "Refining edges...")
-    await this.applyPostProcessing(data, width, height, options)
+    // Detect animals (fur patterns, eyes)
+    if (analysis.furTexture > 0.05 || analysis.animalFeatures > 0.03) {
+      detectedObjects.push({
+        type: "animal",
+        confidence: Math.min(0.9, analysis.furTexture * 15 + analysis.animalFeatures * 25),
+        bbox: this.findAnimalBoundingBox(data, width, height)
+      })
+    }
+    
+    // Detect products (geometric shapes, consistent colors)
+    if (analysis.geometricShapes > 0.1 && analysis.colorConsistency > 0.6) {
+      detectedObjects.push({
+        type: "product",
+        confidence: Math.min(0.85, analysis.geometricShapes * 8 + analysis.colorConsistency * 0.5),
+        bbox: this.findProductBoundingBox(data, width, height)
+      })
+    }
+    
+    // Detect vehicles
+    if (analysis.metallicSurfaces > 0.08 || analysis.vehicleFeatures > 0.05) {
+      detectedObjects.push({
+        type: "vehicle",
+        confidence: Math.min(0.8, analysis.metallicSurfaces * 10 + analysis.vehicleFeatures * 15),
+        bbox: this.findVehicleBoundingBox(data, width, height)
+      })
+    }
+    
+    return detectedObjects
   }
 
-  private static analyzeImageAdvanced(data: Uint8ClampedArray, width: number, height: number) {
+  private static analyzeImageContent(data: Uint8ClampedArray, width: number, height: number) {
     let skinPixels = 0
-    let edgePixels = 0
-    let centerSubjectPixels = 0
-    let backgroundUniformity = 0
-    const totalPixels = width * height
-    const sampleRate = Math.max(1, Math.floor(totalPixels / 2000))
+    let furPixels = 0
+    let metallicPixels = 0
+    let geometricEdges = 0
+    let faceFeatures = 0
+    let animalFeatures = 0
+    let vehicleFeatures = 0
+    let colorVariations = 0
     
-    // Analyze center region for subject detection
-    const centerX = width / 2
-    const centerY = height / 2
-    const centerRadius = Math.min(width, height) * 0.3
+    const totalPixels = width * height
+    const sampleRate = Math.max(1, Math.floor(totalPixels / 5000))
     
     for (let i = 0; i < data.length; i += 4 * sampleRate) {
       const pixelIndex = i / 4
@@ -184,160 +221,779 @@ export class AdvancedBackgroundProcessor {
       const g = data[i + 1]
       const b = data[i + 2]
       
-      // Detect skin tones with better accuracy
-      if (this.isSkinToneAdvanced(r, g, b)) {
+      // Enhanced skin tone detection
+      if (this.isAdvancedSkinTone(r, g, b)) {
         skinPixels++
-      }
-      
-      // Check if pixel is in center region
-      const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
-      if (distanceFromCenter < centerRadius) {
-        centerSubjectPixels++
-      }
-      
-      // Detect edges with improved algorithm
-      if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-        const edgeStrength = this.calculateEdgeStrength(data, x, y, width)
-        if (edgeStrength > 25) {
-          edgePixels++
+        
+        // Check for facial features nearby
+        if (this.detectFacialFeatures(data, x, y, width, height)) {
+          faceFeatures++
         }
       }
       
-      // Check background uniformity (edges and corners)
-      if (this.isEdgePixel(x, y, width, height)) {
-        const neighbors = this.getNeighborColors(data, x, y, width, height)
-        const uniformity = this.calculateColorUniformity(neighbors)
-        backgroundUniformity += uniformity
+      // Fur texture detection
+      if (this.isFurTexture(data, x, y, width, height)) {
+        furPixels++
       }
+      
+      // Metallic surface detection
+      if (this.isMetallicSurface(r, g, b, data, x, y, width, height)) {
+        metallicPixels++
+      }
+      
+      // Geometric shape detection
+      if (this.isGeometricEdge(data, x, y, width, height)) {
+        geometricEdges++
+      }
+      
+      // Animal feature detection
+      if (this.detectAnimalFeatures(data, x, y, width, height)) {
+        animalFeatures++
+      }
+      
+      // Vehicle feature detection
+      if (this.detectVehicleFeatures(data, x, y, width, height)) {
+        vehicleFeatures++
+      }
+      
+      // Color variation analysis
+      const variation = Math.max(r, g, b) - Math.min(r, g, b)
+      colorVariations += variation
     }
     
     const sampledPixels = Math.floor(totalPixels / sampleRate)
-    const edgePixelCount = Math.floor(width * 2 + height * 2)
     
     return {
-      hasPortrait: (skinPixels / sampledPixels) > 0.02,
       skinToneRatio: skinPixels / sampledPixels,
-      hasDistinctSubject: (centerSubjectPixels / sampledPixels) > 0.3,
-      edgeComplexity: edgePixels / sampledPixels,
-      backgroundUniformity: backgroundUniformity / edgePixelCount,
-      isSimpleBackground: backgroundUniformity / edgePixelCount > 0.7
+      furTexture: furPixels / sampledPixels,
+      metallicSurfaces: metallicPixels / sampledPixels,
+      geometricShapes: geometricEdges / sampledPixels,
+      faceFeatures: faceFeatures / sampledPixels,
+      animalFeatures: animalFeatures / sampledPixels,
+      vehicleFeatures: vehicleFeatures / sampledPixels,
+      colorConsistency: 1 - (colorVariations / sampledPixels / 255),
+      hasComplexSubject: (skinPixels + furPixels + metallicPixels) / sampledPixels > 0.1
     }
   }
 
-  private static isSkinToneAdvanced(r: number, g: number, b: number): boolean {
-    // Improved skin tone detection with better color space analysis
-    const max = Math.max(r, g, b)
-    const min = Math.min(r, g, b)
-    
-    // Basic skin tone checks
-    if (r < 95 || g < 40 || b < 20) return false
+  private static isAdvancedSkinTone(r: number, g: number, b: number): boolean {
+    // Enhanced skin tone detection with better accuracy
+    if (r < 80 || g < 50 || b < 30) return false
     if (r <= g || r <= b) return false
-    if (r - g < 15) return false
     
-    // Additional checks for better accuracy
+    // Check skin tone ratios
     const rg = r - g
     const rb = r - b
     const gb = g - b
     
-    // Skin tone typically has specific ratios
-    if (rg < 15 || rb < 15) return false
-    if (gb < -10 || gb > 20) return false
+    if (rg < 10 || rb < 15) return false
+    if (gb < -15 || gb > 25) return false
+    
+    // Additional checks for different skin tones
+    const brightness = (r + g + b) / 3
+    if (brightness < 60 || brightness > 220) return false
     
     // Check saturation
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
     const saturation = (max - min) / max
-    if (saturation < 0.2 || saturation > 0.6) return false
     
-    return true
+    return saturation >= 0.15 && saturation <= 0.7
   }
 
-  private static calculateEdgeStrength(
-    data: Uint8ClampedArray,
-    x: number,
-    y: number,
-    width: number
-  ): number {
-    const centerIdx = (y * width + x) * 4
-    const centerIntensity = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
-    
-    let maxGradient = 0
-    
-    // Check 8-connected neighbors
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue
-        
-        const neighborIdx = ((y + dy) * width + (x + dx)) * 4
-        if (neighborIdx >= 0 && neighborIdx < data.length - 3) {
-          const neighborIntensity = (data[neighborIdx] + data[neighborIdx + 1] + data[neighborIdx + 2]) / 3
-          const gradient = Math.abs(centerIntensity - neighborIntensity)
-          maxGradient = Math.max(maxGradient, gradient)
-        }
-      }
-    }
-    
-    return maxGradient
-  }
-
-  private static isEdgePixel(x: number, y: number, width: number, height: number): boolean {
-    const margin = Math.min(width, height) * 0.1
-    return x < margin || y < margin || x > width - margin || y > height - margin
-  }
-
-  private static getNeighborColors(
+  private static detectFacialFeatures(
     data: Uint8ClampedArray,
     x: number,
     y: number,
     width: number,
     height: number
-  ): Array<{ r: number; g: number; b: number }> {
-    const colors = []
+  ): boolean {
+    // Look for eye-like patterns (dark horizontal regions)
+    const eyePattern = this.detectEyePattern(data, x, y, width, height)
+    const mouthPattern = this.detectMouthPattern(data, x, y, width, height)
+    const nosePattern = this.detectNosePattern(data, x, y, width, height)
+    
+    return eyePattern || mouthPattern || nosePattern
+  }
+
+  private static detectEyePattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Check for horizontal dark regions that could be eyes
+    const searchRadius = 8
+    let darkHorizontalPixels = 0
+    let totalChecked = 0
+    
+    for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+      const nx = x + dx
+      if (nx >= 0 && nx < width) {
+        const idx = (y * width + nx) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (brightness < 80) darkHorizontalPixels++
+        totalChecked++
+      }
+    }
+    
+    return totalChecked > 0 && (darkHorizontalPixels / totalChecked) > 0.6
+  }
+
+  private static detectMouthPattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Look for curved dark regions that could be mouth
+    const searchRadius = 6
+    let darkCurvedPixels = 0
+    let totalChecked = 0
     
     for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
         const nx = x + dx
         const ny = y + dy
         
         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
           const idx = (ny * width + nx) * 4
-          colors.push({
-            r: data[idx],
-            g: data[idx + 1],
-            b: data[idx + 2]
-          })
+          const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+          
+          // Check for curved pattern
+          const distanceFromCenter = Math.abs(dx)
+          const expectedBrightness = 120 - (distanceFromCenter * 10)
+          
+          if (brightness < expectedBrightness) darkCurvedPixels++
+          totalChecked++
         }
       }
     }
     
-    return colors
+    return totalChecked > 0 && (darkCurvedPixels / totalChecked) > 0.4
   }
 
-  private static calculateColorUniformity(colors: Array<{ r: number; g: number; b: number }>): number {
-    if (colors.length === 0) return 0
+  private static detectNosePattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Look for vertical highlight patterns
+    const searchRadius = 4
+    let highlightPixels = 0
+    let totalChecked = 0
     
-    const avgR = colors.reduce((sum, c) => sum + c.r, 0) / colors.length
-    const avgG = colors.reduce((sum, c) => sum + c.g, 0) / colors.length
-    const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length
+    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+      const ny = y + dy
+      if (ny >= 0 && ny < height) {
+        const idx = (ny * width + x) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (brightness > 140) highlightPixels++
+        totalChecked++
+      }
+    }
     
-    const variance = colors.reduce((sum, c) => {
-      return sum + Math.pow(c.r - avgR, 2) + Math.pow(c.g - avgG, 2) + Math.pow(c.b - avgB, 2)
-    }, 0) / colors.length
-    
-    return Math.max(0, 1 - variance / 10000)
+    return totalChecked > 0 && (highlightPixels / totalChecked) > 0.5
   }
 
-  private static async smartPortraitRemoval(
+  private static isFurTexture(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Detect fur-like textures with high frequency patterns
+    if (x < 2 || x >= width - 2 || y < 2 || y >= height - 2) return false
+    
+    let textureVariation = 0
+    let edgeCount = 0
+    
+    // Check 5x5 neighborhood for texture patterns
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const idx = ((y + dy) * width + (x + dx)) * 4
+        const centerIdx = (y * width + x) * 4
+        
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+        
+        const diff = Math.abs(brightness - centerBrightness)
+        textureVariation += diff
+        
+        if (diff > 30) edgeCount++
+      }
+    }
+    
+    // Fur has high texture variation and many small edges
+    return textureVariation > 500 && edgeCount > 8
+  }
+
+  private static isMetallicSurface(
+    r: number,
+    g: number,
+    b: number,
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Metallic surfaces have high reflectivity and specific color characteristics
+    const brightness = (r + g + b) / 3
+    const saturation = (Math.max(r, g, b) - Math.min(r, g, b)) / Math.max(r, g, b)
+    
+    // Check for metallic color range
+    if (saturation > 0.3) return false // Metals are usually low saturation
+    if (brightness < 100) return false // Metals are usually bright
+    
+    // Check for reflective patterns in neighborhood
+    let reflectivePixels = 0
+    const searchRadius = 3
+    
+    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const idx = (ny * width + nx) * 4
+          const nBrightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+          
+          if (nBrightness > 180) reflectivePixels++
+        }
+      }
+    }
+    
+    const totalChecked = (searchRadius * 2 + 1) ** 2
+    return (reflectivePixels / totalChecked) > 0.3
+  }
+
+  private static isGeometricEdge(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (x < 1 || x >= width - 1 || y < 1 || y >= height - 1) return false
+    
+    // Check for straight lines and geometric patterns
+    const centerIdx = (y * width + x) * 4
+    const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+    
+    // Check horizontal line
+    const leftIdx = (y * width + (x - 1)) * 4
+    const rightIdx = (y * width + (x + 1)) * 4
+    const leftBrightness = (data[leftIdx] + data[leftIdx + 1] + data[leftIdx + 2]) / 3
+    const rightBrightness = (data[rightIdx] + data[rightIdx + 1] + data[rightIdx + 2]) / 3
+    
+    const horizontalGradient = Math.abs(leftBrightness - rightBrightness)
+    
+    // Check vertical line
+    const topIdx = ((y - 1) * width + x) * 4
+    const bottomIdx = ((y + 1) * width + x) * 4
+    const topBrightness = (data[topIdx] + data[topIdx + 1] + data[topIdx + 2]) / 3
+    const bottomBrightness = (data[bottomIdx] + data[bottomIdx + 1] + data[bottomIdx + 2]) / 3
+    
+    const verticalGradient = Math.abs(topBrightness - bottomBrightness)
+    
+    // Strong edge in one direction indicates geometric shape
+    return horizontalGradient > 50 || verticalGradient > 50
+  }
+
+  private static detectAnimalFeatures(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Look for animal-specific features like eyes, nose patterns
+    const eyePattern = this.detectAnimalEyes(data, x, y, width, height)
+    const nosePattern = this.detectAnimalNose(data, x, y, width, height)
+    const earPattern = this.detectAnimalEars(data, x, y, width, height)
+    
+    return eyePattern || nosePattern || earPattern
+  }
+
+  private static detectAnimalEyes(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Animal eyes are often reflective and circular
+    const searchRadius = 5
+    let reflectivePixels = 0
+    let darkPixels = 0
+    let totalChecked = 0
+    
+    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        if (distance > searchRadius) continue
+        
+        const nx = x + dx
+        const ny = y + dy
+        
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const idx = (ny * width + nx) * 4
+          const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+          
+          if (distance < 2 && brightness > 200) reflectivePixels++ // Center highlight
+          if (distance > 2 && distance < 4 && brightness < 50) darkPixels++ // Dark iris
+          totalChecked++
+        }
+      }
+    }
+    
+    return reflectivePixels > 0 && darkPixels > 3
+  }
+
+  private static detectAnimalNose(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Animal noses are often dark and triangular
+    const idx = (y * width + x) * 4
+    const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+    
+    if (brightness > 80) return false // Noses are usually dark
+    
+    // Check for triangular pattern
+    let triangularPattern = 0
+    const checkPoints = [
+      [0, -3], [-2, 2], [2, 2] // Triangle points
+    ]
+    
+    checkPoints.forEach(([dx, dy]) => {
+      const nx = x + dx
+      const ny = y + dy
+      
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const nIdx = (ny * width + nx) * 4
+        const nBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+        
+        if (nBrightness < 100) triangularPattern++
+      }
+    })
+    
+    return triangularPattern >= 2
+  }
+
+  private static detectAnimalEars(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Look for ear-like protrusions above potential head area
+    if (y < height * 0.2) { // Only check upper portion
+      const furTexture = this.isFurTexture(data, x, y, width, height)
+      const edgeStrength = this.calculateEdgeStrength(data, x, y, width)
+      
+      return furTexture && edgeStrength > 40
+    }
+    
+    return false
+  }
+
+  private static detectVehicleFeatures(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Detect vehicle-specific features like wheels, windows, grilles
+    const wheelPattern = this.detectWheelPattern(data, x, y, width, height)
+    const windowPattern = this.detectWindowPattern(data, x, y, width, height)
+    const grillPattern = this.detectGrillPattern(data, x, y, width, height)
+    
+    return wheelPattern || windowPattern || grillPattern
+  }
+
+  private static detectWheelPattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Wheels are circular and often dark
+    const radius = 8
+    let circularPattern = 0
+    let darkCenter = 0
+    
+    for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8) {
+      const dx = Math.round(radius * Math.cos(angle))
+      const dy = Math.round(radius * Math.sin(angle))
+      const nx = x + dx
+      const ny = y + dy
+      
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const idx = (ny * width + nx) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (brightness < 100) circularPattern++
+      }
+    }
+    
+    // Check center for dark hub
+    const centerIdx = (y * width + x) * 4
+    const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+    if (centerBrightness < 60) darkCenter = 1
+    
+    return circularPattern > 6 && darkCenter > 0
+  }
+
+  private static detectWindowPattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Windows are often reflective and rectangular
+    const idx = (y * width + x) * 4
+    const r = data[idx]
+    const g = data[idx + 1]
+    const b = data[idx + 2]
+    
+    // Check for blue/reflective tint
+    const blueTint = b > r && b > g && b > 120
+    const brightness = (r + g + b) / 3
+    const isReflective = brightness > 150
+    
+    if (!blueTint && !isReflective) return false
+    
+    // Check for rectangular pattern
+    return this.isPartOfRectangularRegion(data, x, y, width, height)
+  }
+
+  private static detectGrillPattern(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Grills have repeating horizontal or vertical patterns
+    let patternCount = 0
+    
+    // Check horizontal pattern
+    for (let dx = -6; dx <= 6; dx += 2) {
+      const nx = x + dx
+      if (nx >= 0 && nx < width) {
+        const idx = (y * width + nx) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (brightness < 80) patternCount++
+      }
+    }
+    
+    return patternCount > 3
+  }
+
+  private static isPartOfRectangularRegion(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Check if pixel is part of a rectangular region
+    const horizontalConsistency = this.checkHorizontalConsistency(data, x, y, width, height)
+    const verticalConsistency = this.checkVerticalConsistency(data, x, y, width, height)
+    
+    return horizontalConsistency > 0.7 && verticalConsistency > 0.7
+  }
+
+  private static checkHorizontalConsistency(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number {
+    const centerIdx = (y * width + x) * 4
+    const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+    
+    let consistentPixels = 0
+    let totalChecked = 0
+    
+    for (let dx = -5; dx <= 5; dx++) {
+      const nx = x + dx
+      if (nx >= 0 && nx < width) {
+        const idx = (y * width + nx) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (Math.abs(brightness - centerBrightness) < 30) consistentPixels++
+        totalChecked++
+      }
+    }
+    
+    return totalChecked > 0 ? consistentPixels / totalChecked : 0
+  }
+
+  private static checkVerticalConsistency(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number {
+    const centerIdx = (y * width + x) * 4
+    const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+    
+    let consistentPixels = 0
+    let totalChecked = 0
+    
+    for (let dy = -5; dy <= 5; dy++) {
+      const ny = y + dy
+      if (ny >= 0 && ny < height) {
+        const idx = (ny * width + x) * 4
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
+        
+        if (Math.abs(brightness - centerBrightness) < 30) consistentPixels++
+        totalChecked++
+      }
+    }
+    
+    return totalChecked > 0 ? consistentPixels / totalChecked : 0
+  }
+
+  private static findPersonBoundingBox(
     data: Uint8ClampedArray,
     width: number,
-    height: number,
-    options: BackgroundRemovalOptions
+    height: number
+  ): { x: number; y: number; width: number; height: number } {
+    let minX = width, maxX = 0, minY = height, maxY = 0
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4
+        const r = data[idx]
+        const g = data[idx + 1]
+        const b = data[idx + 2]
+        
+        if (this.isAdvancedSkinTone(r, g, b)) {
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+    
+    // Expand bounding box to include clothing and hair
+    const padding = Math.min(width, height) * 0.1
+    return {
+      x: Math.max(0, minX - padding),
+      y: Math.max(0, minY - padding),
+      width: Math.min(width, maxX - minX + padding * 2),
+      height: Math.min(height, maxY - minY + padding * 2)
+    }
+  }
+
+  private static findAnimalBoundingBox(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): { x: number; y: number; width: number; height: number } {
+    let minX = width, maxX = 0, minY = height, maxY = 0
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (this.isFurTexture(data, x, y, width, height) || 
+            this.detectAnimalFeatures(data, x, y, width, height)) {
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+    
+    const padding = Math.min(width, height) * 0.05
+    return {
+      x: Math.max(0, minX - padding),
+      y: Math.max(0, minY - padding),
+      width: Math.min(width, maxX - minX + padding * 2),
+      height: Math.min(height, maxY - minY + padding * 2)
+    }
+  }
+
+  private static findProductBoundingBox(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): { x: number; y: number; width: number; height: number } {
+    // Find the main object by detecting edges and consistent regions
+    const edges = this.detectProductEdges(data, width, height)
+    let minX = width, maxX = 0, minY = height, maxY = 0
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x
+        if (edges[idx] > 0.3) {
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+    
+    return {
+      x: Math.max(0, minX),
+      y: Math.max(0, minY),
+      width: Math.min(width, maxX - minX),
+      height: Math.min(height, maxY - minY)
+    }
+  }
+
+  private static findVehicleBoundingBox(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): { x: number; y: number; width: number; height: number } {
+    // Vehicles are usually large and in the center-bottom area
+    let minX = width, maxX = 0, minY = height, maxY = 0
+    
+    for (let y = Math.floor(height * 0.3); y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (this.detectVehicleFeatures(data, x, y, width, height)) {
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+    
+    const padding = Math.min(width, height) * 0.05
+    return {
+      x: Math.max(0, minX - padding),
+      y: Math.max(0, minY - padding),
+      width: Math.min(width, maxX - minX + padding * 2),
+      height: Math.min(height, maxY - minY + padding * 2)
+    }
+  }
+
+  private static detectProductEdges(data: Uint8ClampedArray, width: number, height: number): Float32Array {
+    const edges = new Float32Array(width * height)
+    
+    // Enhanced edge detection for products
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        
+        // Calculate gradient magnitude
+        let gx = 0, gy = 0
+        
+        // Sobel operator
+        const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
+        const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
+        
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const pixelIdx = ((y + dy) * width + (x + dx)) * 4
+            const intensity = (data[pixelIdx] + data[pixelIdx + 1] + data[pixelIdx + 2]) / 3
+            const kernelIdx = (dy + 1) * 3 + (dx + 1)
+            
+            gx += intensity * sobelX[kernelIdx]
+            gy += intensity * sobelY[kernelIdx]
+          }
+        }
+        
+        const magnitude = Math.sqrt(gx * gx + gy * gy)
+        edges[idx] = Math.min(1, magnitude / 255)
+      }
+    }
+    
+    return edges
+  }
+
+  private static async processWithSpecializedModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    detectedObjects: any[],
+    progressCallback?: (progress: number, stage: string) => void
   ): Promise<void> {
-    // Advanced portrait-specific background removal
+    const algorithm = options.algorithm || "auto"
+    
+    // Auto-select best algorithm based on detected objects
+    let selectedAlgorithm = algorithm
+    if (algorithm === "auto" && detectedObjects.length > 0) {
+      const primaryObject = detectedObjects.reduce((prev, current) => 
+        current.confidence > prev.confidence ? current : prev
+      )
+      
+      switch (primaryObject.type) {
+        case "person":
+          selectedAlgorithm = "portrait"
+          break
+        case "animal":
+          selectedAlgorithm = "animal"
+          break
+        case "product":
+          selectedAlgorithm = "product"
+          break
+        case "vehicle":
+          selectedAlgorithm = "object"
+          break
+        default:
+          selectedAlgorithm = "general"
+      }
+    }
+    
+    progressCallback?.(45, `Applying ${selectedAlgorithm} model...`)
+    
+    // Apply specialized processing based on selected algorithm
+    switch (selectedAlgorithm) {
+      case "portrait":
+        await this.processPortraitModel(imageData, options, progressCallback)
+        break
+      case "animal":
+        await this.processAnimalModel(imageData, options, progressCallback)
+        break
+      case "product":
+        await this.processProductModel(imageData, options, progressCallback)
+        break
+      case "object":
+        await this.processObjectModel(imageData, options, progressCallback)
+        break
+      default:
+        await this.processGeneralModel(imageData, options, progressCallback)
+    }
+  }
+
+  private static async processPortraitModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    progressCallback?: (progress: number, stage: string) => void
+  ): Promise<void> {
+    const { data, width, height } = imageData
+    
+    progressCallback?.(50, "Analyzing portrait features...")
+    
+    // Create advanced subject probability map for portraits
+    const subjectMap = new Float32Array(width * height)
     const centerX = width / 2
     const centerY = height / 2
-    const maxRadius = Math.min(width, height) * 0.4
-    
-    // Create subject probability map
-    const subjectMap = new Float32Array(width * height)
     
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -350,61 +1006,191 @@ export class AdvancedBackgroundProcessor {
         
         let subjectProbability = 0
         
-        // Distance from center (portraits usually centered)
-        const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
-        const centerWeight = Math.max(0, 1 - distanceFromCenter / maxRadius)
-        subjectProbability += centerWeight * 0.4
-        
-        // Skin tone detection
-        if (this.isSkinToneAdvanced(r, g, b)) {
-          subjectProbability += 0.8
+        // Enhanced skin tone detection
+        if (this.isAdvancedSkinTone(r, g, b)) {
+          subjectProbability += 0.9
         }
         
-        // Hair detection (dark areas near skin)
-        const hairWeight = this.detectHairAdvanced(data, x, y, width, height)
-        subjectProbability += hairWeight * 0.6
+        // Hair detection (improved)
+        const hairWeight = this.detectAdvancedHair(data, x, y, width, height)
+        subjectProbability += hairWeight * 0.8
         
-        // Clothing detection (varied colors in center region)
-        const clothingWeight = this.detectClothing(data, x, y, width, height, centerX, centerY)
-        subjectProbability += clothingWeight * 0.5
+        // Clothing detection in portrait context
+        const clothingWeight = this.detectPortraitClothing(data, x, y, width, height, centerX, centerY)
+        subjectProbability += clothingWeight * 0.7
         
-        // Edge proximity (subjects have more edges)
-        const edgeWeight = this.calculateEdgeProximity(data, x, y, width, height)
-        subjectProbability += edgeWeight * 0.3
+        // Face feature detection
+        const faceWeight = this.detectFacialFeatures(data, x, y, width, height) ? 0.95 : 0
+        subjectProbability += faceWeight
+        
+        // Position weight for portraits (subjects usually centered)
+        const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
+        const maxDistance = Math.min(width, height) * 0.4
+        const positionWeight = Math.max(0, 1 - distanceFromCenter / maxDistance) * 0.3
+        subjectProbability += positionWeight
         
         subjectMap[pixelIdx] = Math.min(1, subjectProbability)
       }
     }
     
-    // Apply Gaussian blur to smooth the probability map
-    this.gaussianBlurFloat32(subjectMap, width, height, 3)
+    progressCallback?.(65, "Refining portrait edges...")
     
-    // Apply background removal based on probability
+    // Apply advanced smoothing for portraits
+    this.gaussianBlurFloat32(subjectMap, width, height, 2)
+    
+    // Apply background removal with portrait-specific thresholds
     for (let i = 0; i < width * height; i++) {
       const probability = subjectMap[i]
       const pixelIdx = i * 4
       
-      if (probability < 0.3) {
+      if (probability < 0.2) {
         // Definitely background
         data[pixelIdx + 3] = 0
-      } else if (probability < 0.7) {
-        // Edge area - apply smooth transition
-        const alpha = Math.round((probability - 0.3) / 0.4 * 255)
+      } else if (probability < 0.8) {
+        // Edge area - apply smooth transition with portrait-optimized curve
+        const alpha = this.portraitAlphaCurve(probability)
         data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
       }
       // Else keep original alpha (definitely subject)
     }
   }
 
-  private static async smartSubjectRemoval(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    options: BackgroundRemovalOptions
+  private static async processAnimalModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    progressCallback?: (progress: number, stage: string) => void
   ): Promise<void> {
-    // Advanced subject detection for objects
-    const backgroundColors = this.sampleBackgroundColorsAdvanced(data, width, height)
+    const { data, width, height } = imageData
+    
+    progressCallback?.(50, "Analyzing animal features...")
+    
+    const subjectMap = new Float32Array(width * height)
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const pixelIdx = y * width + x
+        let subjectProbability = 0
+        
+        // Fur texture detection
+        if (this.isFurTexture(data, x, y, width, height)) {
+          subjectProbability += 0.8
+        }
+        
+        // Animal feature detection
+        if (this.detectAnimalFeatures(data, x, y, width, height)) {
+          subjectProbability += 0.9
+        }
+        
+        // Eye detection for animals
+        if (this.detectAnimalEyes(data, x, y, width, height)) {
+          subjectProbability += 0.95
+        }
+        
+        // Nose/snout detection
+        if (this.detectAnimalNose(data, x, y, width, height)) {
+          subjectProbability += 0.85
+        }
+        
+        // Ear detection
+        if (this.detectAnimalEars(data, x, y, width, height)) {
+          subjectProbability += 0.7
+        }
+        
+        subjectMap[pixelIdx] = Math.min(1, subjectProbability)
+      }
+    }
+    
+    progressCallback?.(65, "Refining animal edges...")
+    
+    // Apply smoothing optimized for animal fur
+    this.gaussianBlurFloat32(subjectMap, width, height, 1.5)
+    
+    // Apply background removal with animal-specific thresholds
+    for (let i = 0; i < width * height; i++) {
+      const probability = subjectMap[i]
+      const pixelIdx = i * 4
+      
+      if (probability < 0.15) {
+        data[pixelIdx + 3] = 0
+      } else if (probability < 0.75) {
+        const alpha = this.animalAlphaCurve(probability)
+        data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
+      }
+    }
+  }
+
+  private static async processProductModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    progressCallback?: (progress: number, stage: string) => void
+  ): Promise<void> {
+    const { data, width, height } = imageData
+    
+    progressCallback?.(50, "Analyzing product edges...")
+    
+    // Product-specific processing focuses on clean edges and geometric shapes
+    const edges = this.detectProductEdges(data, width, height)
+    const backgroundMask = this.floodFillProductBackground(data, edges, width, height)
+    
+    progressCallback?.(65, "Applying product-optimized removal...")
+    
+    // Apply removal with sharp, clean edges for products
+    for (let i = 0; i < width * height; i++) {
+      const isBackground = backgroundMask[i]
+      const pixelIdx = i * 4
+      
+      if (isBackground > 0.9) {
+        data[pixelIdx + 3] = 0
+      } else if (isBackground > 0.1) {
+        // Sharper transitions for products
+        const alpha = Math.round((1 - isBackground) * 255)
+        data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
+      }
+    }
+  }
+
+  private static async processObjectModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    progressCallback?: (progress: number, stage: string) => void
+  ): Promise<void> {
+    const { data, width, height } = imageData
+    
+    progressCallback?.(50, "Detecting object boundaries...")
+    
+    // General object detection with enhanced edge analysis
+    const edges = this.detectAdvancedEdges(data, width, height)
+    const objectMask = this.createObjectMask(data, edges, width, height, options.sensitivity || 25)
+    
+    progressCallback?.(65, "Applying object-aware removal...")
+    
+    // Apply removal with balanced edge handling
+    for (let i = 0; i < width * height; i++) {
+      const isObject = objectMask[i]
+      const pixelIdx = i * 4
+      
+      if (isObject < 0.3) {
+        data[pixelIdx + 3] = 0
+      } else if (isObject < 0.7) {
+        const alpha = Math.round(isObject * 255)
+        data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
+      }
+    }
+  }
+
+  private static async processGeneralModel(
+    imageData: ImageData,
+    options: BackgroundRemovalOptions,
+    progressCallback?: (progress: number, stage: string) => void
+  ): Promise<void> {
+    const { data, width, height } = imageData
+    
+    progressCallback?.(50, "Applying general background removal...")
+    
+    // Hybrid approach combining multiple techniques
+    const backgroundColors = this.sampleBackgroundColors(data, width, height)
     const dominantBg = this.findDominantBackgroundColor(backgroundColors)
+    const sensitivity = options.sensitivity || 25
     
     // Create background probability map
     const backgroundMap = new Float32Array(width * height)
@@ -418,77 +1204,63 @@ export class AdvancedBackgroundProcessor {
         const g = data[idx + 1]
         const b = data[idx + 2]
         
-        // Calculate color similarity to background
-        const colorDistance = this.calculatePerceptualDistance(
-          { r, g, b },
-          dominantBg
-        )
+        // Enhanced color similarity calculation
+        const colorDistance = this.calculatePerceptualDistance({ r, g, b }, dominantBg)
+        const colorWeight = Math.max(0, 1 - colorDistance / (sensitivity * 4))
         
-        // Edge proximity (backgrounds usually have fewer edges)
-        const edgeStrength = this.calculateEdgeStrength(data, x, y, width)
-        const edgeWeight = 1 - Math.min(1, edgeStrength / 50)
+        // Edge proximity
+        const edgeWeight = 1 - Math.min(1, this.calculateEdgeStrength(data, x, y, width) / 60)
         
         // Position weight (backgrounds more likely at edges)
-        const positionWeight = this.calculatePositionWeight(x, y, width, height)
+        const positionWeight = this.calculateEdgeProximity(x, y, width, height)
         
-        // Texture analysis (backgrounds often more uniform)
+        // Texture uniformity
         const textureWeight = this.calculateTextureUniformity(data, x, y, width, height)
         
-        // Combine weights
         const backgroundProbability = 
-          (1 - colorDistance / 150) * 0.4 +
-          edgeWeight * 0.2 +
+          colorWeight * 0.4 +
+          edgeWeight * 0.25 +
           positionWeight * 0.2 +
-          textureWeight * 0.2
+          textureWeight * 0.15
         
         backgroundMap[pixelIdx] = Math.max(0, Math.min(1, backgroundProbability))
       }
     }
     
-    // Apply Gaussian blur to smooth transitions
+    progressCallback?.(65, "Smoothing transitions...")
+    
+    // Apply smoothing
     this.gaussianBlurFloat32(backgroundMap, width, height, 2)
     
-    // Apply background removal
+    // Apply removal
     for (let i = 0; i < width * height; i++) {
       const backgroundProb = backgroundMap[i]
       const pixelIdx = i * 4
       
-      if (backgroundProb > 0.7) {
-        // Definitely background
+      if (backgroundProb > 0.8) {
         data[pixelIdx + 3] = 0
-      } else if (backgroundProb > 0.3) {
-        // Transition area
+      } else if (backgroundProb > 0.2) {
         const alpha = Math.round((1 - backgroundProb) * 255)
         data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
       }
     }
   }
 
-  private static async smartEdgeBasedRemoval(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    options: BackgroundRemovalOptions
-  ): Promise<void> {
-    // Enhanced edge-based removal for complex images
-    const edges = this.detectEdgesAdvanced(data, width, height)
-    const backgroundMask = this.floodFillBackgroundAdvanced(data, edges, width, height)
-    
-    // Apply removal with intelligent feathering
-    for (let i = 0; i < width * height; i++) {
-      const isBackground = backgroundMask[i]
-      const pixelIdx = i * 4
-      
-      if (isBackground > 0.8) {
-        data[pixelIdx + 3] = 0
-      } else if (isBackground > 0.3) {
-        const alpha = Math.round((1 - isBackground) * 255)
-        data[pixelIdx + 3] = Math.min(data[pixelIdx + 3], alpha)
-      }
-    }
+  private static portraitAlphaCurve(probability: number): number {
+    // Smooth S-curve for portrait edges
+    const t = (probability - 0.2) / 0.6
+    const smoothed = t * t * (3 - 2 * t)
+    return Math.round(smoothed * 255)
   }
 
-  private static detectHairAdvanced(
+  private static animalAlphaCurve(probability: number): number {
+    // Softer curve for animal fur edges
+    const t = (probability - 0.15) / 0.6
+    const smoothed = Math.sin(t * Math.PI / 2)
+    return Math.round(smoothed * 255)
+  }
+
+  private static detectAdvancedHair(
     data: Uint8ClampedArray,
     x: number,
     y: number,
@@ -500,13 +1272,71 @@ export class AdvancedBackgroundProcessor {
     const g = data[idx + 1]
     const b = data[idx + 2]
     
-    // Hair is typically dark and has texture
+    // Hair detection with better color analysis
     const brightness = (r + g + b) / 3
-    if (brightness > 100) return 0
+    if (brightness > 120) return 0 // Hair is usually darker
+    
+    // Check for hair-like texture patterns
+    const textureScore = this.calculateHairTexture(data, x, y, width, height)
     
     // Look for nearby skin tones
-    let nearSkin = false
-    const searchRadius = 15
+    const skinProximity = this.findNearbySkinTones(data, x, y, width, height)
+    
+    // Hair color analysis
+    const isHairColor = this.isTypicalHairColor(r, g, b)
+    
+    return Math.min(1, textureScore * 0.4 + skinProximity * 0.4 + (isHairColor ? 0.2 : 0))
+  }
+
+  private static calculateHairTexture(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number {
+    let textureVariation = 0
+    let edgeCount = 0
+    const radius = 3
+    
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const nIdx = (ny * width + nx) * 4
+          const centerIdx = (y * width + x) * 4
+          
+          const nBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+          const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+          
+          const diff = Math.abs(nBrightness - centerBrightness)
+          textureVariation += diff
+          
+          if (diff > 25) edgeCount++
+        }
+      }
+    }
+    
+    const totalChecked = (radius * 2 + 1) ** 2
+    const avgVariation = textureVariation / totalChecked
+    const edgeRatio = edgeCount / totalChecked
+    
+    // Hair has moderate variation and many small edges
+    return Math.min(1, (avgVariation / 50) * 0.6 + edgeRatio * 0.4)
+  }
+
+  private static findNearbySkinTones(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number {
+    let skinPixels = 0
+    let totalChecked = 0
+    const searchRadius = 20
     
     for (let dy = -searchRadius; dy <= searchRadius; dy += 3) {
       for (let dx = -searchRadius; dx <= searchRadius; dx += 3) {
@@ -515,19 +1345,39 @@ export class AdvancedBackgroundProcessor {
         
         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
           const nIdx = (ny * width + nx) * 4
-          if (this.isSkinToneAdvanced(data[nIdx], data[nIdx + 1], data[nIdx + 2])) {
-            nearSkin = true
-            break
+          if (this.isAdvancedSkinTone(data[nIdx], data[nIdx + 1], data[nIdx + 2])) {
+            skinPixels++
           }
+          totalChecked++
         }
       }
-      if (nearSkin) break
     }
     
-    return nearSkin && brightness < 80 ? 0.8 : 0
+    return totalChecked > 0 ? skinPixels / totalChecked : 0
   }
 
-  private static detectClothing(
+  private static isTypicalHairColor(r: number, g: number, b: number): boolean {
+    const brightness = (r + g + b) / 3
+    
+    // Black hair
+    if (brightness < 60 && Math.max(r, g, b) - Math.min(r, g, b) < 30) return true
+    
+    // Brown hair
+    if (r > g && r > b && g > b && brightness < 120) return true
+    
+    // Blonde hair
+    if (r > 150 && g > 130 && b < 120 && brightness > 120) return true
+    
+    // Red hair
+    if (r > g * 1.3 && r > b * 1.5 && brightness > 80) return true
+    
+    // Gray/white hair
+    if (Math.abs(r - g) < 20 && Math.abs(g - b) < 20 && brightness > 120) return true
+    
+    return false
+  }
+
+  private static detectPortraitClothing(
     data: Uint8ClampedArray,
     x: number,
     y: number,
@@ -536,71 +1386,59 @@ export class AdvancedBackgroundProcessor {
     centerX: number,
     centerY: number
   ): number {
+    // Clothing is typically in the lower-center region of portraits
     const distanceFromCenter = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
     const maxDistance = Math.min(width, height) * 0.4
     
-    if (distanceFromCenter > maxDistance) return 0
-    
-    const idx = (y * width + x) * 4
-    const r = data[idx]
-    const g = data[idx + 1]
-    const b = data[idx + 2]
-    
-    // Clothing often has consistent colors and is in the center-lower region
-    const isInClothingRegion = y > height * 0.4 && distanceFromCenter < maxDistance * 0.8
+    // Focus on lower portion where clothing typically appears
+    const isInClothingRegion = y > height * 0.5 && distanceFromCenter < maxDistance
     
     if (!isInClothingRegion) return 0
     
-    // Check for color consistency in local area
-    const consistency = this.calculateLocalColorConsistency(data, x, y, width, height)
+    // Check for fabric-like textures and consistent colors
+    const fabricTexture = this.detectFabricTexture(data, x, y, width, height)
+    const colorConsistency = this.calculateLocalColorConsistency(data, x, y, width, height)
     
-    return consistency * 0.6
+    return Math.min(1, fabricTexture * 0.6 + colorConsistency * 0.4)
   }
 
-  private static calculateEdgeProximity(
+  private static detectFabricTexture(
     data: Uint8ClampedArray,
     x: number,
     y: number,
     width: number,
     height: number
   ): number {
-    let edgeCount = 0
-    const searchRadius = 5
+    // Fabric has moderate texture variation (less than fur, more than skin)
+    let textureScore = 0
+    const radius = 4
     
-    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
-      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
         const nx = x + dx
         const ny = y + dy
         
         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-          const edgeStrength = this.calculateEdgeStrength(data, nx, ny, width)
-          if (edgeStrength > 30) {
-            edgeCount++
-          }
+          const nIdx = (ny * width + nx) * 4
+          const centerIdx = (y * width + x) * 4
+          
+          const nBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+          const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+          
+          const diff = Math.abs(nBrightness - centerBrightness)
+          textureScore += diff
         }
       }
     }
     
-    const totalChecked = (searchRadius * 2 + 1) ** 2
-    return edgeCount / totalChecked
-  }
-
-  private static calculatePositionWeight(x: number, y: number, width: number, height: number): number {
-    const distanceFromEdge = Math.min(x, y, width - x, height - y)
-    const maxDistance = Math.min(width, height) * 0.3
+    const avgTexture = textureScore / ((radius * 2 + 1) ** 2)
     
-    return Math.max(0, 1 - distanceFromEdge / maxDistance)
-  }
-
-  private static calculateTextureUniformity(
-    data: Uint8ClampedArray,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): number {
-    const colors = this.getNeighborColors(data, x, y, width, height)
-    return this.calculateColorUniformity(colors)
+    // Fabric texture is in the middle range
+    if (avgTexture > 15 && avgTexture < 40) {
+      return Math.min(1, avgTexture / 30)
+    }
+    
+    return 0
   }
 
   private static calculateLocalColorConsistency(
@@ -610,8 +1448,8 @@ export class AdvancedBackgroundProcessor {
     width: number,
     height: number
   ): number {
-    const radius = 8
     const colors = []
+    const radius = 6
     
     for (let dy = -radius; dy <= radius; dy += 2) {
       for (let dx = -radius; dx <= radius; dx += 2) {
@@ -629,42 +1467,333 @@ export class AdvancedBackgroundProcessor {
       }
     }
     
-    return this.calculateColorUniformity(colors)
+    if (colors.length === 0) return 0
+    
+    // Calculate color variance
+    const avgR = colors.reduce((sum, c) => sum + c.r, 0) / colors.length
+    const avgG = colors.reduce((sum, c) => sum + c.g, 0) / colors.length
+    const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length
+    
+    const variance = colors.reduce((sum, c) => {
+      return sum + Math.pow(c.r - avgR, 2) + Math.pow(c.g - avgG, 2) + Math.pow(c.b - avgB, 2)
+    }, 0) / colors.length
+    
+    return Math.max(0, 1 - variance / 5000)
   }
 
-  private static sampleBackgroundColorsAdvanced(
+  private static floodFillProductBackground(
+    data: Uint8ClampedArray,
+    edges: Float32Array,
+    width: number,
+    height: number
+  ): Float32Array {
+    const backgroundMap = new Float32Array(width * height)
+    const visited = new Uint8Array(width * height)
+    const queue: Array<[number, number]> = []
+    
+    // Start from all edge points for better coverage
+    const edgePoints = []
+    
+    // Top and bottom edges
+    for (let x = 0; x < width; x += 5) {
+      edgePoints.push([x, 0])
+      edgePoints.push([x, height - 1])
+    }
+    
+    // Left and right edges
+    for (let y = 0; y < height; y += 5) {
+      edgePoints.push([0, y])
+      edgePoints.push([width - 1, y])
+    }
+    
+    edgePoints.forEach(([x, y]) => {
+      if (edges[y * width + x] < 0.3) {
+        queue.push([x, y])
+      }
+    })
+    
+    while (queue.length > 0) {
+      const [x, y] = queue.shift()!
+      const idx = y * width + x
+      
+      if (visited[idx] || edges[idx] > 0.4) continue
+      
+      visited[idx] = 1
+      backgroundMap[idx] = 1
+      
+      // Add 8-connected neighbors
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            const nIdx = ny * width + nx
+            if (!visited[nIdx] && edges[nIdx] <= 0.4) {
+              queue.push([nx, ny])
+            }
+          }
+        }
+      }
+    }
+    
+    return backgroundMap
+  }
+
+  private static detectAdvancedEdges(data: Uint8ClampedArray, width: number, height: number): Float32Array {
+    const edges = new Float32Array(width * height)
+    
+    // Multi-scale edge detection
+    const scales = [1, 2, 3]
+    
+    scales.forEach(scale => {
+      for (let y = scale; y < height - scale; y++) {
+        for (let x = scale; x < width - scale; x++) {
+          const idx = y * width + x
+          
+          let gx = 0, gy = 0
+          
+          // Scaled Sobel operator
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const pixelIdx = ((y + dy * scale) * width + (x + dx * scale)) * 4
+              const intensity = (data[pixelIdx] + data[pixelIdx + 1] + data[pixelIdx + 2]) / 3
+              
+              // Sobel kernels
+              const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
+              const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
+              const kernelIdx = (dy + 1) * 3 + (dx + 1)
+              
+              gx += intensity * sobelX[kernelIdx]
+              gy += intensity * sobelY[kernelIdx]
+            }
+          }
+          
+          const magnitude = Math.sqrt(gx * gx + gy * gy) / scale
+          edges[idx] = Math.max(edges[idx], Math.min(1, magnitude / 255))
+        }
+      }
+    })
+    
+    return edges
+  }
+
+  private static createObjectMask(
+    data: Uint8ClampedArray,
+    edges: Float32Array,
+    width: number,
+    height: number,
+    sensitivity: number
+  ): Float32Array {
+    const objectMask = new Float32Array(width * height)
+    
+    // Use watershed-like algorithm for object segmentation
+    const seeds = this.findObjectSeeds(data, edges, width, height)
+    const regions = this.growRegions(data, seeds, width, height, sensitivity)
+    
+    // Classify regions as object or background
+    regions.forEach(region => {
+      const isObject = this.classifyRegion(region, data, width, height)
+      region.pixels.forEach(pixelIdx => {
+        objectMask[pixelIdx] = isObject ? 1 : 0
+      })
+    })
+    
+    return objectMask
+  }
+
+  private static findObjectSeeds(
+    data: Uint8ClampedArray,
+    edges: Float32Array,
+    width: number,
+    height: number
+  ): Array<{ x: number; y: number; type: "object" | "background" }> {
+    const seeds = []
+    
+    // Background seeds from edges
+    const edgePoints = [
+      [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1],
+      [Math.floor(width / 2), 0], [Math.floor(width / 2), height - 1],
+      [0, Math.floor(height / 2)], [width - 1, Math.floor(height / 2)]
+    ]
+    
+    edgePoints.forEach(([x, y]) => {
+      if (edges[y * width + x] < 0.2) {
+        seeds.push({ x, y, type: "background" })
+      }
+    })
+    
+    // Object seeds from center regions with low edge activity
+    const centerX = Math.floor(width / 2)
+    const centerY = Math.floor(height / 2)
+    const searchRadius = Math.min(width, height) * 0.2
+    
+    for (let y = centerY - searchRadius; y <= centerY + searchRadius; y += 10) {
+      for (let x = centerX - searchRadius; x <= centerX + searchRadius; x += 10) {
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          const idx = y * width + x
+          if (edges[idx] < 0.1) {
+            seeds.push({ x, y, type: "object" })
+          }
+        }
+      }
+    }
+    
+    return seeds
+  }
+
+  private static growRegions(
+    data: Uint8ClampedArray,
+    seeds: Array<{ x: number; y: number; type: "object" | "background" }>,
+    width: number,
+    height: number,
+    sensitivity: number
+  ): Array<{ pixels: number[]; type: "object" | "background"; avgColor: { r: number; g: number; b: number } }> {
+    const regions = []
+    const visited = new Uint8Array(width * height)
+    
+    seeds.forEach(seed => {
+      if (visited[seed.y * width + seed.x]) return
+      
+      const region = {
+        pixels: [] as number[],
+        type: seed.type,
+        avgColor: { r: 0, g: 0, b: 0 }
+      }
+      
+      const queue = [[seed.x, seed.y]]
+      const seedIdx = (seed.y * width + seed.x) * 4
+      const seedColor = {
+        r: data[seedIdx],
+        g: data[seedIdx + 1],
+        b: data[seedIdx + 2]
+      }
+      
+      while (queue.length > 0) {
+        const [x, y] = queue.shift()!
+        const idx = y * width + x
+        
+        if (visited[idx]) continue
+        
+        const pixelIdx = idx * 4
+        const pixelColor = {
+          r: data[pixelIdx],
+          g: data[pixelIdx + 1],
+          b: data[pixelIdx + 2]
+        }
+        
+        const colorDistance = this.calculatePerceptualDistance(pixelColor, seedColor)
+        if (colorDistance > sensitivity * 2) continue
+        
+        visited[idx] = 1
+        region.pixels.push(idx)
+        
+        // Add neighbors
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx
+            const ny = y + dy
+            
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const nIdx = ny * width + nx
+              if (!visited[nIdx]) {
+                queue.push([nx, ny])
+              }
+            }
+          }
+        }
+      }
+      
+      // Calculate average color
+      if (region.pixels.length > 0) {
+        let totalR = 0, totalG = 0, totalB = 0
+        region.pixels.forEach(pixelIdx => {
+          const idx = pixelIdx * 4
+          totalR += data[idx]
+          totalG += data[idx + 1]
+          totalB += data[idx + 2]
+        })
+        
+        region.avgColor = {
+          r: totalR / region.pixels.length,
+          g: totalG / region.pixels.length,
+          b: totalB / region.pixels.length
+        }
+        
+        regions.push(region)
+      }
+    })
+    
+    return regions
+  }
+
+  private static classifyRegion(
+    region: { pixels: number[]; type: "object" | "background"; avgColor: { r: number; g: number; b: number } },
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): boolean {
+    // If region was seeded as object, it's likely object
+    if (region.type === "object") return true
+    
+    // Analyze region characteristics
+    const regionSize = region.pixels.length
+    const totalPixels = width * height
+    const sizeRatio = regionSize / totalPixels
+    
+    // Large regions are more likely to be background
+    if (sizeRatio > 0.6) return false
+    
+    // Check if region is at image edges
+    const edgePixels = region.pixels.filter(pixelIdx => {
+      const x = pixelIdx % width
+      const y = Math.floor(pixelIdx / width)
+      return x === 0 || x === width - 1 || y === 0 || y === height - 1
+    }).length
+    
+    const edgeRatio = edgePixels / regionSize
+    
+    // Regions touching edges are more likely background
+    if (edgeRatio > 0.1) return false
+    
+    // Small, central regions are more likely objects
+    return sizeRatio < 0.3
+  }
+
+  private static sampleBackgroundColors(
     data: Uint8ClampedArray,
     width: number,
     height: number
   ): Array<{ r: number; g: number; b: number }> {
     const samples = []
-    const margin = Math.min(width, height) * 0.05
+    const margin = Math.min(width, height) * 0.03
     
-    // Sample from edges with better coverage
-    const samplePoints = []
-    
-    // Top and bottom edges
-    for (let x = 0; x < width; x += Math.floor(width / 20)) {
-      samplePoints.push([x, margin])
-      samplePoints.push([x, height - margin])
+    // Enhanced sampling from edges
+    for (let i = 0; i < 50; i++) {
+      // Top edge
+      const topX = Math.floor(Math.random() * width)
+      const topY = Math.floor(Math.random() * margin)
+      let idx = (topY * width + topX) * 4
+      samples.push({ r: data[idx], g: data[idx + 1], b: data[idx + 2] })
+      
+      // Bottom edge
+      const bottomX = Math.floor(Math.random() * width)
+      const bottomY = height - 1 - Math.floor(Math.random() * margin)
+      idx = (bottomY * width + bottomX) * 4
+      samples.push({ r: data[idx], g: data[idx + 1], b: data[idx + 2] })
+      
+      // Left edge
+      const leftX = Math.floor(Math.random() * margin)
+      const leftY = Math.floor(Math.random() * height)
+      idx = (leftY * width + leftX) * 4
+      samples.push({ r: data[idx], g: data[idx + 1], b: data[idx + 2] })
+      
+      // Right edge
+      const rightX = width - 1 - Math.floor(Math.random() * margin)
+      const rightY = Math.floor(Math.random() * height)
+      idx = (rightY * width + rightX) * 4
+      samples.push({ r: data[idx], g: data[idx + 1], b: data[idx + 2] })
     }
-    
-    // Left and right edges
-    for (let y = 0; y < height; y += Math.floor(height / 20)) {
-      samplePoints.push([margin, y])
-      samplePoints.push([width - margin, y])
-    }
-    
-    samplePoints.forEach(([x, y]) => {
-      if (x >= 0 && x < width && y >= 0 && y < height) {
-        const idx = (Math.floor(y) * width + Math.floor(x)) * 4
-        samples.push({
-          r: data[idx],
-          g: data[idx + 1],
-          b: data[idx + 2]
-        })
-      }
-    })
     
     return samples
   }
@@ -672,11 +1801,34 @@ export class AdvancedBackgroundProcessor {
   private static findDominantBackgroundColor(
     colors: Array<{ r: number; g: number; b: number }>
   ): { r: number; g: number; b: number } {
-    // K-means clustering to find dominant background color
-    const k = 3
-    const centroids = []
+    // Enhanced clustering for background color detection
+    const clusters = this.performKMeansClustering(colors, 4)
     
+    // Find the cluster most likely to be background
+    let bestCluster = clusters[0]
+    let bestScore = 0
+    
+    clusters.forEach(cluster => {
+      // Score based on frequency and edge presence
+      const frequency = cluster.count / colors.length
+      const edgeAffinity = this.calculateBackgroundAffinity(cluster.centroid)
+      const score = frequency * 0.7 + edgeAffinity * 0.3
+      
+      if (score > bestScore) {
+        bestScore = score
+        bestCluster = cluster
+      }
+    })
+    
+    return bestCluster.centroid
+  }
+
+  private static performKMeansClustering(
+    colors: Array<{ r: number; g: number; b: number }>,
+    k: number
+  ): Array<{ centroid: { r: number; g: number; b: number }; count: number }> {
     // Initialize centroids
+    const centroids = []
     for (let i = 0; i < k; i++) {
       centroids.push(colors[Math.floor(Math.random() * colors.length)])
     }
@@ -713,142 +1865,151 @@ export class AdvancedBackgroundProcessor {
       })
     }
     
-    // Return the centroid with the most samples (likely background)
-    let maxSamples = 0
-    let dominantColor = centroids[0]
+    // Return clusters with counts
+    return centroids.map((centroid, index) => ({
+      centroid,
+      count: colors.filter(color => {
+        const distances = centroids.map(c => this.calculatePerceptualDistance(color, c))
+        const minIndex = distances.indexOf(Math.min(...distances))
+        return minIndex === index
+      }).length
+    }))
+  }
+
+  private static calculateBackgroundAffinity(color: { r: number; g: number; b: number }): number {
+    const brightness = (color.r + color.g + color.b) / 3
+    const saturation = (Math.max(color.r, color.g, color.b) - Math.min(color.r, color.g, color.b)) / Math.max(color.r, color.g, color.b)
     
-    centroids.forEach(centroid => {
-      const samples = colors.filter(color => 
-        this.calculatePerceptualDistance(color, centroid) < 30
-      ).length
-      
-      if (samples > maxSamples) {
-        maxSamples = samples
-        dominantColor = centroid
-      }
-    })
+    // Backgrounds are often bright and low saturation
+    const brightnessScore = brightness / 255
+    const saturationScore = 1 - saturation
     
-    return dominantColor
+    return (brightnessScore * 0.6 + saturationScore * 0.4)
   }
 
   private static calculatePerceptualDistance(
     color1: { r: number; g: number; b: number },
     color2: { r: number; g: number; b: number }
   ): number {
-    // Use perceptual color distance (weighted RGB)
+    // Enhanced perceptual color distance
+    const deltaR = color1.r - color2.r
+    const deltaG = color1.g - color2.g
+    const deltaB = color1.b - color2.b
+    
+    // Weighted RGB distance (closer to human perception)
     return Math.sqrt(
-      Math.pow(color1.r - color2.r, 2) * 0.3 +
-      Math.pow(color1.g - color2.g, 2) * 0.59 +
-      Math.pow(color1.b - color2.b, 2) * 0.11
+      deltaR * deltaR * 0.3 +
+      deltaG * deltaG * 0.59 +
+      deltaB * deltaB * 0.11
     )
   }
 
-  private static detectEdgesAdvanced(data: Uint8ClampedArray, width: number, height: number): Float32Array {
-    const edges = new Float32Array(width * height)
+  private static calculateEdgeStrength(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number
+  ): number {
+    if (x < 1 || x >= width - 1 || y < 1) return 0
     
-    // Sobel edge detection with improved kernels
-    const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
-    const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
+    const centerIdx = (y * width + x) * 4
+    const centerIntensity = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
     
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = y * width + x
+    let maxGradient = 0
+    
+    // Check 8-connected neighbors
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue
         
-        let gx = 0, gy = 0
-        
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const pixelIdx = ((y + dy) * width + (x + dx)) * 4
-            const intensity = (data[pixelIdx] + data[pixelIdx + 1] + data[pixelIdx + 2]) / 3
-            const kernelIdx = (dy + 1) * 3 + (dx + 1)
-            
-            gx += intensity * sobelX[kernelIdx]
-            gy += intensity * sobelY[kernelIdx]
-          }
+        const neighborIdx = ((y + dy) * width + (x + dx)) * 4
+        if (neighborIdx >= 0 && neighborIdx < data.length - 3) {
+          const neighborIntensity = (data[neighborIdx] + data[neighborIdx + 1] + data[neighborIdx + 2]) / 3
+          const gradient = Math.abs(centerIntensity - neighborIntensity)
+          maxGradient = Math.max(maxGradient, gradient)
         }
-        
-        const magnitude = Math.sqrt(gx * gx + gy * gy)
-        edges[idx] = Math.min(1, magnitude / 255)
       }
     }
     
-    return edges
+    return maxGradient
   }
 
-  private static floodFillBackgroundAdvanced(
+  private static calculateEdgeProximity(x: number, y: number, width: number, height: number): number {
+    const distanceFromEdge = Math.min(x, y, width - x, height - y)
+    const maxDistance = Math.min(width, height) * 0.2
+    
+    return Math.max(0, 1 - distanceFromEdge / maxDistance)
+  }
+
+  private static calculateTextureUniformity(
     data: Uint8ClampedArray,
-    edges: Float32Array,
+    x: number,
+    y: number,
     width: number,
     height: number
-  ): Float32Array {
-    const backgroundMap = new Float32Array(width * height)
-    const visited = new Uint8Array(width * height)
-    const queue: Array<[number, number, number]> = [] // x, y, confidence
+  ): number {
+    const colors = []
+    const radius = 4
     
-    // Start from multiple edge points with confidence scores
-    const startPoints = [
-      [0, 0, 1.0], [width - 1, 0, 1.0], [0, height - 1, 1.0], [width - 1, height - 1, 1.0],
-      [Math.floor(width / 2), 0, 0.9], [Math.floor(width / 2), height - 1, 0.9],
-      [0, Math.floor(height / 2), 0.9], [width - 1, Math.floor(height / 2), 0.9]
-    ]
-    
-    startPoints.forEach(([x, y, confidence]) => {
-      if (x >= 0 && x < width && y >= 0 && y < height) {
-        queue.push([x, y, confidence])
-      }
-    })
-    
-    while (queue.length > 0) {
-      const [x, y, confidence] = queue.shift()!
-      const idx = y * width + x
-      
-      if (visited[idx] || edges[idx] > 0.3) continue
-      
-      visited[idx] = 1
-      backgroundMap[idx] = confidence
-      
-      // Add neighbors with reduced confidence
-      const neighbors = [[x+1,y], [x-1,y], [x,y+1], [x,y-1]]
-      neighbors.forEach(([nx, ny]) => {
+    for (let dy = -radius; dy <= radius; dy += 2) {
+      for (let dx = -radius; dx <= radius; dx += 2) {
+        const nx = x + dx
+        const ny = y + dy
+        
         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-          const nIdx = ny * width + nx
-          if (!visited[nIdx] && edges[nIdx] <= 0.3) {
-            const newConfidence = confidence * 0.95
-            if (newConfidence > 0.1) {
-              queue.push([nx, ny, newConfidence])
-            }
-          }
+          const idx = (ny * width + nx) * 4
+          colors.push({
+            r: data[idx],
+            g: data[idx + 1],
+            b: data[idx + 2]
+          })
         }
-      })
+      }
     }
     
-    return backgroundMap
+    if (colors.length === 0) return 0
+    
+    const avgR = colors.reduce((sum, c) => sum + c.r, 0) / colors.length
+    const avgG = colors.reduce((sum, c) => sum + c.g, 0) / colors.length
+    const avgB = colors.reduce((sum, c) => sum + c.b, 0) / colors.length
+    
+    const variance = colors.reduce((sum, c) => {
+      return sum + Math.pow(c.r - avgR, 2) + Math.pow(c.g - avgG, 2) + Math.pow(c.b - avgB, 2)
+    }, 0) / colors.length
+    
+    return Math.max(0, 1 - variance / 8000)
   }
 
-  private static async applyPostProcessing(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
+  private static async applyAdvancedPostProcessing(
+    imageData: ImageData,
     options: BackgroundRemovalOptions
   ): Promise<void> {
-    // Apply morphological operations to clean up the mask
-    this.applyMorphologicalClosing(data, width, height)
+    const { data, width, height } = imageData
     
-    // Apply edge smoothing
-    if (options.smoothing && options.smoothing > 0) {
-      this.applyAdvancedSmoothing(data, width, height, options.smoothing)
+    // Apply morphological operations
+    this.applyMorphologicalOperations(data, width, height)
+    
+    // Apply edge refinement
+    if (options.featherEdges !== false) {
+      this.applyAdvancedFeathering(data, width, height, options.smoothing || 3)
     }
     
-    // Remove small isolated regions
-    this.removeSmallRegions(data, width, height)
+    // Remove noise and small artifacts
+    this.removeSmallArtifacts(data, width, height)
+    
+    // Enhance edge quality
+    if (options.preserveDetails !== false) {
+      this.enhanceEdgeQuality(data, width, height)
+    }
   }
 
-  private static applyMorphologicalClosing(
+  private static applyMorphologicalOperations(
     data: Uint8ClampedArray,
     width: number,
     height: number
   ): void {
-    const radius = 2
+    // Apply opening (erosion followed by dilation) to remove noise
+    const radius = 1
     const tempAlpha = new Uint8ClampedArray(width * height)
     
     // Extract alpha channel
@@ -856,9 +2017,23 @@ export class AdvancedBackgroundProcessor {
       tempAlpha[i] = data[i * 4 + 3]
     }
     
-    // Dilation followed by erosion
-    const dilated = new Uint8ClampedArray(tempAlpha)
+    // Erosion
     const eroded = new Uint8ClampedArray(tempAlpha)
+    for (let y = radius; y < height - radius; y++) {
+      for (let x = radius; x < width - radius; x++) {
+        const idx = y * width + x
+        let minAlpha = 255
+        
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const nIdx = (y + dy) * width + (x + dx)
+            minAlpha = Math.min(minAlpha, tempAlpha[nIdx])
+          }
+        }
+        
+        eroded[idx] = minAlpha
+      }
+    }
     
     // Dilation
     for (let y = radius; y < height - radius; y++) {
@@ -869,51 +2044,37 @@ export class AdvancedBackgroundProcessor {
         for (let dy = -radius; dy <= radius; dy++) {
           for (let dx = -radius; dx <= radius; dx++) {
             const nIdx = (y + dy) * width + (x + dx)
-            maxAlpha = Math.max(maxAlpha, tempAlpha[nIdx])
+            maxAlpha = Math.max(maxAlpha, eroded[nIdx])
           }
         }
         
-        dilated[idx] = maxAlpha
+        tempAlpha[idx] = maxAlpha
       }
     }
     
-    // Erosion
-    for (let y = radius; y < height - radius; y++) {
-      for (let x = radius; x < width - radius; x++) {
-        const idx = y * width + x
-        let minAlpha = 255
-        
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const nIdx = (y + dy) * width + (x + dx)
-            minAlpha = Math.min(minAlpha, dilated[nIdx])
-          }
-        }
-        
-        eroded[idx] = minAlpha
-      }
-    }
-    
-    // Apply result back to alpha channel
+    // Apply result back
     for (let i = 0; i < width * height; i++) {
-      data[i * 4 + 3] = eroded[i]
+      data[i * 4 + 3] = tempAlpha[i]
     }
   }
 
-  private static applyAdvancedSmoothing(
+  private static applyAdvancedFeathering(
     data: Uint8ClampedArray,
     width: number,
     height: number,
     smoothing: number
   ): void {
-    const radius = Math.ceil(smoothing / 2)
+    const radius = Math.ceil(smoothing)
     const smoothed = new Uint8ClampedArray(width * height)
     
+    // Advanced bilateral filtering for alpha channel
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = y * width + x
-        let alphaSum = 0
+        const centerAlpha = data[idx * 4 + 3]
+        
         let weightSum = 0
+        let alphaSum = 0
         
         for (let dy = -radius; dy <= radius; dy++) {
           for (let dx = -radius; dx <= radius; dx++) {
@@ -922,11 +2083,19 @@ export class AdvancedBackgroundProcessor {
             
             if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
               const nIdx = ny * width + nx
-              const distance = Math.sqrt(dx * dx + dy * dy)
-              const weight = Math.exp(-distance / (radius * 0.5))
+              const neighborAlpha = data[nIdx * 4 + 3]
               
-              alphaSum += data[nIdx * 4 + 3] * weight
+              // Spatial weight
+              const spatialDistance = Math.sqrt(dx * dx + dy * dy)
+              const spatialWeight = Math.exp(-spatialDistance / (radius * 0.5))
+              
+              // Alpha similarity weight
+              const alphaDiff = Math.abs(centerAlpha - neighborAlpha)
+              const alphaWeight = Math.exp(-alphaDiff / 50)
+              
+              const weight = spatialWeight * alphaWeight
               weightSum += weight
+              alphaSum += neighborAlpha * weight
             }
           }
         }
@@ -941,13 +2110,13 @@ export class AdvancedBackgroundProcessor {
     }
   }
 
-  private static removeSmallRegions(
+  private static removeSmallArtifacts(
     data: Uint8ClampedArray,
     width: number,
     height: number
   ): void {
     const visited = new Uint8Array(width * height)
-    const minRegionSize = Math.floor(width * height * 0.001) // 0.1% of image
+    const minRegionSize = Math.floor(width * height * 0.0005) // 0.05% of image
     
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -962,6 +2131,50 @@ export class AdvancedBackgroundProcessor {
             this.removeRegion(data, x, y, width, height)
           }
         }
+      }
+    }
+  }
+
+  private static enhanceEdgeQuality(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): void {
+    // Enhance alpha channel edges for better quality
+    const enhanced = new Uint8ClampedArray(width * height)
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        const centerAlpha = data[idx * 4 + 3]
+        
+        // Calculate local alpha gradient
+        let maxGradient = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            
+            const nIdx = (y + dy) * width + (x + dx)
+            const neighborAlpha = data[nIdx * 4 + 3]
+            const gradient = Math.abs(centerAlpha - neighborAlpha)
+            maxGradient = Math.max(maxGradient, gradient)
+          }
+        }
+        
+        // Enhance edges
+        if (maxGradient > 50 && centerAlpha > 0) {
+          enhanced[idx] = Math.min(255, centerAlpha * 1.1)
+        } else {
+          enhanced[idx] = centerAlpha
+        }
+      }
+    }
+    
+    // Apply enhanced alpha
+    for (let i = 1; i < width - 1; i++) {
+      for (let j = 1; j < height - 1; j++) {
+        const idx = j * width + i
+        data[idx * 4 + 3] = enhanced[idx]
       }
     }
   }

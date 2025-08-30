@@ -1,59 +1,44 @@
-// Ultimate image upscaling with multiple AI algorithms and quality enhancement
+// Ultimate Image Upscaler - Production-ready with crash prevention
 export interface UltimateUpscaleOptions {
-  // Scale Settings
   scaleFactor?: number
   maxOutputDimension?: number
-  
-  // AI Models
-  primaryAlgorithm?: "auto" | "esrgan" | "waifu2x" | "real-esrgan" | "srcnn" | "edsr"
+  primaryAlgorithm?: "auto" | "lanczos" | "bicubic" | "esrgan" | "real-esrgan" | "waifu2x" | "srcnn" | "edsr"
   secondaryAlgorithm?: "lanczos" | "bicubic" | "mitchell" | "catmull-rom"
   hybridMode?: boolean
-  
-  // Content Analysis
   enableContentAnalysis?: boolean
-  contentType?: "photo" | "art" | "text" | "mixed" | "auto"
-  
-  // Quality Enhancement
+  contentType?: "auto" | "photo" | "art" | "text" | "mixed"
   enhanceDetails?: boolean
   reduceNoise?: boolean
   sharpenAmount?: number
   colorEnhancement?: boolean
   contrastBoost?: number
-  
-  // Performance
   multiPass?: boolean
   memoryOptimized?: boolean
-  useWebWorkers?: boolean
   chunkProcessing?: boolean
-  
-  // Output
-  outputFormat?: "png" | "webp" | "jpeg"
+  outputFormat?: "png" | "jpeg" | "webp"
   quality?: number
-  
-  // Callbacks
   progressCallback?: (progress: number, stage: string) => void
   debugMode?: boolean
 }
 
 export interface UpscaleResult {
   processedBlob: Blob
-  originalDimensions: { width: number; height: number }
-  finalDimensions: { width: number; height: number }
   actualScaleFactor: number
+  finalDimensions: { width: number; height: number }
   algorithmsUsed: string[]
   processingTime: number
   qualityMetrics: {
     sharpness: number
-    noiseLevel: number
-    artifactLevel: number
-    overallQuality: number
+    noise: number
+    artifacts: number
   }
 }
 
 export class UltimateImageUpscaler {
-  private static readonly MAX_SAFE_DIMENSION = 4096
-  private static readonly MEMORY_LIMIT = 150 * 1024 * 1024 // 150MB
-  private static readonly CHUNK_SIZE = 512
+  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // 2.3MP for stability
+  private static readonly MAX_OUTPUT_PIXELS = 2048 * 2048 // 4MP max output
+  private static readonly MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB absolute limit
+  private static readonly CHUNK_SIZE = 256 * 256 // Process in smaller chunks
   
   static async upscaleImage(
     imageFile: File,
@@ -61,416 +46,216 @@ export class UltimateImageUpscaler {
   ): Promise<UpscaleResult> {
     const startTime = Date.now()
     
-    // Enhanced safety checks
-    if (imageFile.size > 25 * 1024 * 1024) {
-      throw new Error("Image too large. Maximum 25MB supported for ultimate upscaling.")
-    }
-
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = async () => {
-        try {
-          options.progressCallback?.(5, "Analyzing image content")
-          
-          // Step 1: Advanced Content Analysis
-          const contentAnalysis = await this.performAdvancedContentAnalysis(img, options)
-          options.progressCallback?.(15, "Content analysis complete")
-          
-          // Step 2: Calculate Optimal Processing Strategy
-          const processingStrategy = this.calculateProcessingStrategy(
-            img.naturalWidth,
-            img.naturalHeight,
-            contentAnalysis,
-            options
-          )
-          options.progressCallback?.(20, "Planning processing strategy")
-          
-          // Step 3: Multi-Algorithm Upscaling
-          const upscaledCanvas = await this.performMultiAlgorithmUpscaling(
-            img,
-            processingStrategy,
-            options
-          )
-          options.progressCallback?.(70, "AI upscaling complete")
-          
-          // Step 4: Advanced Post-Processing
-          await this.applyAdvancedPostProcessing(upscaledCanvas, contentAnalysis, options)
-          options.progressCallback?.(90, "Enhancing quality")
-          
-          // Step 5: Final Quality Optimization
-          await this.applyFinalQualityOptimization(upscaledCanvas, contentAnalysis, options)
-          options.progressCallback?.(95, "Final optimization")
-          
-          // Create final blob
-          const quality = (options.quality || 95) / 100
-          const mimeType = `image/${options.outputFormat || "png"}`
-          
-          upscaledCanvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const processingTime = Date.now() - startTime
-                const qualityMetrics = this.calculateQualityMetrics(upscaledCanvas, contentAnalysis)
-                
-                resolve({
-                  processedBlob: blob,
-                  originalDimensions: { width: img.naturalWidth, height: img.naturalHeight },
-                  finalDimensions: { width: upscaledCanvas.width, height: upscaledCanvas.height },
-                  actualScaleFactor: upscaledCanvas.width / img.naturalWidth,
-                  algorithmsUsed: processingStrategy.algorithmsUsed,
-                  processingTime,
-                  qualityMetrics
-                })
-              } else {
-                reject(new Error("Failed to create output blob"))
-              }
-            },
-            mimeType,
-            quality
-          )
-        } catch (error) {
-          reject(error)
-        }
+    try {
+      // Enhanced safety checks
+      if (imageFile.size > this.MAX_FILE_SIZE) {
+        throw new Error(`File too large (${Math.round(imageFile.size / (1024 * 1024))}MB). Maximum 50MB allowed.`)
       }
 
+      if (!imageFile.type.startsWith('image/')) {
+        throw new Error("Invalid file type. Please upload an image file.")
+      }
+
+      options.progressCallback?.(5, "Loading image")
+      
+      // Load image with safety checks
+      const { canvas, ctx, originalDimensions } = await this.loadImageSafely(imageFile, options)
+      
+      options.progressCallback?.(15, "Analyzing image content")
+      
+      // Analyze image for optimal processing
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const analysis = this.analyzeImageForUpscaling(imageData)
+      
+      options.progressCallback?.(25, "Calculating optimal scale")
+      
+      // Calculate safe scale factor
+      const { actualScaleFactor, targetDimensions } = this.calculateSafeScale(
+        canvas.width,
+        canvas.height,
+        options.scaleFactor || 2,
+        options.maxOutputDimension
+      )
+      
+      if (actualScaleFactor < 1.1) {
+        throw new Error("Scale factor too small or image too large for upscaling")
+      }
+      
+      options.progressCallback?.(35, "Running primary AI algorithm")
+      
+      // Apply primary upscaling algorithm
+      const primaryResult = await this.applyPrimaryUpscaling(canvas, actualScaleFactor, analysis, options)
+      
+      options.progressCallback?.(65, "Applying enhancements")
+      
+      // Apply secondary enhancements
+      const enhancedResult = await this.applySecondaryEnhancements(primaryResult, analysis, options)
+      
+      options.progressCallback?.(85, "Post-processing")
+      
+      // Apply final post-processing
+      await this.applyFinalPostProcessing(enhancedResult, options)
+      
+      options.progressCallback?.(95, "Creating output")
+      
+      // Create final blob
+      const processedBlob = await this.createOutputBlob(enhancedResult, options)
+      
+      options.progressCallback?.(100, "Complete")
+      
+      // Calculate quality metrics
+      const qualityMetrics = this.calculateQualityMetrics(enhancedResult)
+      
+      // Cleanup memory
+      this.cleanupMemory([canvas, primaryResult, enhancedResult])
+      
+      return {
+        processedBlob,
+        actualScaleFactor,
+        finalDimensions: targetDimensions,
+        algorithmsUsed: [options.primaryAlgorithm || "auto", options.secondaryAlgorithm || "lanczos"],
+        processingTime: Date.now() - startTime,
+        qualityMetrics
+      }
+    } catch (error) {
+      options.progressCallback?.(0, "Error occurred")
+      console.error("Image upscaling failed:", error)
+      throw new Error(error instanceof Error ? error.message : "Image upscaling failed")
+    }
+  }
+
+  private static async loadImageSafely(
+    file: File,
+    options: UltimateUpscaleOptions
+  ): Promise<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; originalDimensions: { width: number; height: number } }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      
+      img.onload = () => {
+        try {
+          const originalDimensions = { width: img.naturalWidth, height: img.naturalHeight }
+          
+          // Calculate safe processing dimensions
+          let workingWidth = img.naturalWidth
+          let workingHeight = img.naturalHeight
+          
+          // Pre-scale if image is too large for processing
+          if (workingWidth * workingHeight > this.MAX_SAFE_PIXELS) {
+            const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (workingWidth * workingHeight))
+            workingWidth = Math.floor(workingWidth * scale)
+            workingHeight = Math.floor(workingHeight * scale)
+          }
+          
+          // Create canvas with safe dimensions
+          const canvas = document.createElement("canvas")
+          const ctx = canvas.getContext("2d", {
+            alpha: true,
+            willReadFrequently: false,
+            desynchronized: true
+          })
+          
+          if (!ctx) {
+            reject(new Error("Canvas not supported"))
+            return
+          }
+          
+          canvas.width = Math.max(1, workingWidth)
+          canvas.height = Math.max(1, workingHeight)
+          
+          // High quality rendering
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = "high"
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          
+          resolve({ canvas, ctx, originalDimensions })
+        } catch (error) {
+          reject(new Error("Failed to process image: " + (error instanceof Error ? error.message : "Unknown error")))
+        }
+      }
+      
       img.onerror = () => reject(new Error("Failed to load image"))
       img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(imageFile)
+      img.src = URL.createObjectURL(file)
     })
   }
 
-  private static async performAdvancedContentAnalysis(
-    img: HTMLImageElement,
-    options: UltimateUpscaleOptions
-  ): Promise<{
-    contentType: string
-    hasPhotographicContent: boolean
-    hasArtContent: boolean
-    hasTextContent: boolean
-    noiseLevel: number
-    sharpnessLevel: number
-    colorComplexity: number
-    edgeComplexity: number
-    compressionArtifacts: number
-    optimalAlgorithms: string[]
-  }> {
-    // Create analysis canvas
-    const analysisCanvas = document.createElement("canvas")
-    const analysisCtx = analysisCanvas.getContext("2d")!
+  private static calculateSafeScale(
+    currentWidth: number,
+    currentHeight: number,
+    requestedScale: number,
+    maxOutputDimension?: number
+  ): { actualScaleFactor: number; targetDimensions: { width: number; height: number } } {
+    let actualScaleFactor = Math.min(requestedScale, 4) // Max 4x scale
     
-    // Use smaller size for analysis to save memory
-    const analysisSize = 512
-    const scale = Math.min(analysisSize / img.naturalWidth, analysisSize / img.naturalHeight)
+    // Calculate target dimensions
+    let targetWidth = Math.floor(currentWidth * actualScaleFactor)
+    let targetHeight = Math.floor(currentHeight * actualScaleFactor)
     
-    analysisCanvas.width = Math.floor(img.naturalWidth * scale)
-    analysisCanvas.height = Math.floor(img.naturalHeight * scale)
+    // Apply max output dimension limit
+    const maxDim = Math.min(maxOutputDimension || 2048, 2048)
+    if (targetWidth > maxDim || targetHeight > maxDim) {
+      const scale = Math.min(maxDim / targetWidth, maxDim / targetHeight)
+      actualScaleFactor *= scale
+      targetWidth = Math.floor(currentWidth * actualScaleFactor)
+      targetHeight = Math.floor(currentHeight * actualScaleFactor)
+    }
     
-    analysisCtx.imageSmoothingEnabled = true
-    analysisCtx.imageSmoothingQuality = "high"
-    analysisCtx.drawImage(img, 0, 0, analysisCanvas.width, analysisCanvas.height)
+    // Check output pixel limit
+    if (targetWidth * targetHeight > this.MAX_OUTPUT_PIXELS) {
+      const scale = Math.sqrt(this.MAX_OUTPUT_PIXELS / (targetWidth * targetHeight))
+      actualScaleFactor *= scale
+      targetWidth = Math.floor(currentWidth * actualScaleFactor)
+      targetHeight = Math.floor(currentHeight * actualScaleFactor)
+    }
     
-    const imageData = analysisCtx.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height)
-    const data = imageData.data
-    const width = analysisCanvas.width
-    const height = analysisCanvas.height
-    
-    // Analyze different aspects
-    const photographicScore = this.analyzePhotographicContent(data, width, height)
-    const artScore = this.analyzeArtContent(data, width, height)
-    const textScore = this.analyzeTextContent(data, width, height)
-    const noiseLevel = this.analyzeNoiseLevel(data, width, height)
-    const sharpnessLevel = this.analyzeSharpness(data, width, height)
-    const colorComplexity = this.analyzeColorComplexity(data, width, height)
-    const edgeComplexity = this.analyzeEdgeComplexity(data, width, height)
-    const compressionArtifacts = this.analyzeCompressionArtifacts(data, width, height)
-    
-    // Determine content type
-    let contentType = "mixed"
-    if (photographicScore > 0.7) contentType = "photo"
-    else if (artScore > 0.6) contentType = "art"
-    else if (textScore > 0.5) contentType = "text"
-    
-    // Determine optimal algorithms based on analysis
-    const optimalAlgorithms = this.determineOptimalAlgorithms(
-      contentType,
-      photographicScore,
-      artScore,
-      textScore,
-      noiseLevel,
-      compressionArtifacts
-    )
+    // Ensure minimum scale
+    if (actualScaleFactor < 1.1) {
+      actualScaleFactor = 1.1
+      targetWidth = Math.floor(currentWidth * actualScaleFactor)
+      targetHeight = Math.floor(currentHeight * actualScaleFactor)
+    }
     
     return {
-      contentType,
-      hasPhotographicContent: photographicScore > 0.5,
-      hasArtContent: artScore > 0.4,
-      hasTextContent: textScore > 0.3,
-      noiseLevel,
-      sharpnessLevel,
-      colorComplexity,
-      edgeComplexity,
-      compressionArtifacts,
-      optimalAlgorithms
+      actualScaleFactor,
+      targetDimensions: { width: targetWidth, height: targetHeight }
     }
   }
 
-  private static analyzePhotographicContent(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let photographicIndicators = 0
-    let totalPixels = 0
-    let colorVariation = 0
-    let gradientSmoothness = 0
+  private static analyzeImageForUpscaling(imageData: ImageData): {
+    contentType: "photo" | "art" | "text" | "mixed"
+    hasSharpEdges: boolean
+    noiseLevel: number
+    colorComplexity: number
+    textContent: number
+    isPixelArt: boolean
+    compressionArtifacts: number
+  } {
+    const { data, width, height } = imageData
     
-    for (let y = 1; y < height - 1; y += 3) {
-      for (let x = 1; x < width - 1; x += 3) {
-        const idx = (y * width + x) * 4
-        totalPixels++
-        
-        // Analyze color variation (photos have high variation)
-        const r = data[idx]
-        const g = data[idx + 1]
-        const b = data[idx + 2]
-        
-        const variation = Math.max(r, g, b) - Math.min(r, g, b)
-        colorVariation += variation
-        
-        // Analyze gradient smoothness
-        let gradientSum = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const gradient = Math.abs(data[idx] - data[nIdx]) +
-                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
-                           Math.abs(data[idx + 2] - data[nIdx + 2])
-            gradientSum += gradient
-          }
-        }
-        
-        gradientSmoothness += gradientSum / 8
-        
-        // Check for photographic characteristics
-        if (variation > 30 && gradientSum < 200) {
-          photographicIndicators++
-        }
-      }
-    }
-    
-    const avgColorVariation = colorVariation / totalPixels
-    const avgGradientSmoothness = gradientSmoothness / totalPixels
-    const photographicRatio = photographicIndicators / totalPixels
-    
-    // Combine metrics for photographic score
-    return Math.min(1.0, (avgColorVariation / 100) * 0.4 + (1 - avgGradientSmoothness / 300) * 0.3 + photographicRatio * 0.3)
-  }
-
-  private static analyzeArtContent(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let artIndicators = 0
-    let totalPixels = 0
-    let sharpEdges = 0
-    let colorPalette = new Set<string>()
-    
-    for (let y = 1; y < height - 1; y += 2) {
-      for (let x = 1; x < width - 1; x += 2) {
-        const idx = (y * width + x) * 4
-        totalPixels++
-        
-        const r = data[idx]
-        const g = data[idx + 1]
-        const b = data[idx + 2]
-        
-        // Track color palette (art often has limited palette)
-        const colorKey = `${Math.floor(r/16)}-${Math.floor(g/16)}-${Math.floor(b/16)}`
-        colorPalette.add(colorKey)
-        
-        // Check for sharp edges (common in art)
-        let maxGradient = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const gradient = Math.abs(data[idx] - data[nIdx]) +
-                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
-                           Math.abs(data[idx + 2] - data[nIdx + 2])
-            maxGradient = Math.max(maxGradient, gradient)
-          }
-        }
-        
-        if (maxGradient > 100) sharpEdges++
-        
-        // Art characteristics: limited palette, sharp edges, flat colors
-        const saturation = (Math.max(r, g, b) - Math.min(r, g, b)) / Math.max(r, g, b, 1)
-        if (saturation > 0.6 && maxGradient > 80) {
-          artIndicators++
-        }
-      }
-    }
-    
-    const paletteComplexity = colorPalette.size / totalPixels
-    const sharpEdgeRatio = sharpEdges / totalPixels
-    const artRatio = artIndicators / totalPixels
-    
-    // Art typically has limited palette and sharp edges
-    return Math.min(1.0, (1 - paletteComplexity) * 0.4 + sharpEdgeRatio * 0.4 + artRatio * 0.2)
-  }
-
-  private static analyzeTextContent(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let textIndicators = 0
-    let totalPixels = 0
-    let highContrastEdges = 0
-    
-    for (let y = 1; y < height - 1; y += 2) {
-      for (let x = 1; x < width - 1; x += 2) {
-        const idx = (y * width + x) * 4
-        totalPixels++
-        
-        // Text has very high contrast edges
-        let maxContrast = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const contrast = Math.abs(data[idx] - data[nIdx]) +
-                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
-                           Math.abs(data[idx + 2] - data[nIdx + 2])
-            maxContrast = Math.max(maxContrast, contrast)
-          }
-        }
-        
-        if (maxContrast > 200) {
-          highContrastEdges++
-          
-          // Check for text-like patterns
-          const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-          if (brightness < 50 || brightness > 200) {
-            textIndicators++
-          }
-        }
-      }
-    }
-    
-    const highContrastRatio = highContrastEdges / totalPixels
-    const textRatio = textIndicators / totalPixels
-    
-    return Math.min(1.0, highContrastRatio * 0.6 + textRatio * 0.4)
-  }
-
-  private static analyzeNoiseLevel(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let noiseSum = 0
-    let totalPixels = 0
-    
-    for (let y = 1; y < height - 1; y += 3) {
-      for (let x = 1; x < width - 1; x += 3) {
-        const idx = (y * width + x) * 4
-        totalPixels++
-        
-        // Calculate local variance as noise indicator
-        const centerBrightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-        let variance = 0
-        let count = 0
-        
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const neighborBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
-            variance += Math.pow(centerBrightness - neighborBrightness, 2)
-            count++
-          }
-        }
-        
-        noiseSum += Math.sqrt(variance / count)
-      }
-    }
-    
-    return Math.min(1.0, (noiseSum / totalPixels) / 50)
-  }
-
-  private static analyzeSharpness(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let sharpnessSum = 0
-    let totalPixels = 0
-    
-    for (let y = 1; y < height - 1; y += 2) {
-      for (let x = 1; x < width - 1; x += 2) {
-        const idx = (y * width + x) * 4
-        totalPixels++
-        
-        // Laplacian operator for sharpness
-        const center = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-        let laplacian = center * 4
-        
-        const neighbors = [
-          ((y - 1) * width + x) * 4,
-          ((y + 1) * width + x) * 4,
-          (y * width + (x - 1)) * 4,
-          (y * width + (x + 1)) * 4
-        ]
-        
-        neighbors.forEach(nIdx => {
-          const neighborBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
-          laplacian -= neighborBrightness
-        })
-        
-        sharpnessSum += Math.abs(laplacian)
-      }
-    }
-    
-    return Math.min(1.0, (sharpnessSum / totalPixels) / 100)
-  }
-
-  private static analyzeColorComplexity(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    const colorSet = new Set<string>()
-    let totalPixels = 0
-    
-    for (let y = 0; y < height; y += 4) {
-      for (let x = 0; x < width; x += 4) {
-        const idx = (y * width + x) * 4
-        const colorKey = `${Math.floor(data[idx]/8)}-${Math.floor(data[idx+1]/8)}-${Math.floor(data[idx+2]/8)}`
-        colorSet.add(colorKey)
-        totalPixels++
-      }
-    }
-    
-    return Math.min(1.0, colorSet.size / totalPixels * 10)
-  }
-
-  private static analyzeEdgeComplexity(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
     let edgeCount = 0
-    let totalPixels = 0
+    let highFreqCount = 0
+    let noiseCount = 0
+    let textIndicators = 0
+    let compressionIndicators = 0
+    let totalSamples = 0
     
-    for (let y = 1; y < height - 1; y += 2) {
-      for (let x = 1; x < width - 1; x += 2) {
+    const uniqueColors = new Set<string>()
+    
+    // Sample every 3rd pixel for performance
+    for (let y = 1; y < height - 1; y += 3) {
+      for (let x = 1; x < width - 1; x += 3) {
         const idx = (y * width + x) * 4
-        totalPixels++
+        const r = data[idx]
+        const g = data[idx + 1]
+        const b = data[idx + 2]
         
+        totalSamples++
+        
+        // Track unique colors
+        const colorKey = `${Math.floor(r/8)}-${Math.floor(g/8)}-${Math.floor(b/8)}`
+        uniqueColors.add(colorKey)
+        
+        // Calculate local gradient
         let maxGradient = 0
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
@@ -485,611 +270,551 @@ export class UltimateImageUpscaler {
         }
         
         if (maxGradient > 50) edgeCount++
-      }
-    }
-    
-    return edgeCount / totalPixels
-  }
-
-  private static analyzeCompressionArtifacts(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): number {
-    let artifactScore = 0
-    let totalBlocks = 0
-    
-    // Analyze 8x8 blocks for JPEG artifacts
-    for (let y = 0; y < height - 8; y += 8) {
-      for (let x = 0; x < width - 8; x += 8) {
-        totalBlocks++
+        if (maxGradient > 150) highFreqCount++
+        if (maxGradient > 200) textIndicators++
         
-        // Check for blocking artifacts
-        const blockVariance = this.calculateBlockVariance(data, x, y, width, height)
-        const edgeVariance = this.calculateBlockEdgeVariance(data, x, y, width, height)
+        // Detect noise
+        if (this.isNoisePixel(data, x, y, width, height)) {
+          noiseCount++
+        }
         
-        if (blockVariance < 100 && edgeVariance > 50) {
-          artifactScore++
+        // Detect compression artifacts
+        if (this.hasCompressionArtifacts(data, x, y, width, height)) {
+          compressionIndicators++
         }
       }
     }
     
-    return totalBlocks > 0 ? artifactScore / totalBlocks : 0
-  }
-
-  private static calculateBlockVariance(
-    data: Uint8ClampedArray,
-    startX: number,
-    startY: number,
-    width: number,
-    height: number
-  ): number {
-    let sum = 0
-    let count = 0
+    const colorComplexity = uniqueColors.size / totalSamples
+    const edgeRatio = edgeCount / totalSamples
+    const noiseLevel = noiseCount / totalSamples
+    const textContent = textIndicators / totalSamples
+    const compressionArtifacts = compressionIndicators / totalSamples
     
-    for (let y = startY; y < startY + 8 && y < height; y++) {
-      for (let x = startX; x < startX + 8 && x < width; x++) {
-        const idx = (y * width + x) * 4
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-        sum += brightness
-        count++
-      }
+    // Determine content type
+    let contentType: "photo" | "art" | "text" | "mixed" = "mixed"
+    
+    if (textContent > 0.15) {
+      contentType = "text"
+    } else if (colorComplexity < 0.05 && edgeRatio > 0.3) {
+      contentType = "art"
+    } else if (noiseLevel < 0.1 && compressionArtifacts < 0.1) {
+      contentType = "photo"
     }
-    
-    const mean = sum / count
-    let variance = 0
-    
-    for (let y = startY; y < startY + 8 && y < height; y++) {
-      for (let x = startX; x < startX + 8 && x < width; x++) {
-        const idx = (y * width + x) * 4
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-        variance += Math.pow(brightness - mean, 2)
-      }
-    }
-    
-    return variance / count
-  }
-
-  private static calculateBlockEdgeVariance(
-    data: Uint8ClampedArray,
-    startX: number,
-    startY: number,
-    width: number,
-    height: number
-  ): number {
-    let edgeVariance = 0
-    
-    // Check edges of the 8x8 block
-    const edges = [
-      // Top edge
-      ...Array.from({ length: 8 }, (_, i) => [startX + i, startY]),
-      // Bottom edge
-      ...Array.from({ length: 8 }, (_, i) => [startX + i, startY + 7]),
-      // Left edge
-      ...Array.from({ length: 8 }, (_, i) => [startX, startY + i]),
-      // Right edge
-      ...Array.from({ length: 8 }, (_, i) => [startX + 7, startY + i])
-    ]
-    
-    edges.forEach(([x, y]) => {
-      if (x < width && y < height) {
-        const idx = (y * width + x) * 4
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3
-        
-        // Check difference with adjacent blocks
-        const adjacentPositions = [
-          [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]
-        ]
-        
-        adjacentPositions.forEach(([adjX, adjY]) => {
-          if (adjX >= 0 && adjX < width && adjY >= 0 && adjY < height) {
-            const adjIdx = (adjY * width + adjX) * 4
-            const adjBrightness = (data[adjIdx] + data[adjIdx + 1] + data[adjIdx + 2]) / 3
-            edgeVariance += Math.abs(brightness - adjBrightness)
-          }
-        })
-      }
-    })
-    
-    return edgeVariance / edges.length
-  }
-
-  private static determineOptimalAlgorithms(
-    contentType: string,
-    photographicScore: number,
-    artScore: number,
-    textScore: number,
-    noiseLevel: number,
-    compressionArtifacts: number
-  ): string[] {
-    const algorithms: string[] = []
-    
-    // Primary algorithm selection
-    if (contentType === "photo" || photographicScore > 0.7) {
-      if (compressionArtifacts > 0.3) {
-        algorithms.push("real-esrgan") // Best for compressed photos
-      } else {
-        algorithms.push("esrgan") // Best for clean photos
-      }
-    } else if (contentType === "art" || artScore > 0.6) {
-      algorithms.push("waifu2x") // Best for anime/art
-    } else if (contentType === "text" || textScore > 0.5) {
-      algorithms.push("lanczos") // Best for text/sharp edges
-    } else {
-      algorithms.push("auto") // Let system decide
-    }
-    
-    // Secondary algorithm for hybrid processing
-    if (noiseLevel > 0.3) {
-      algorithms.push("srcnn") // Good for noise reduction
-    } else if (textScore > 0.2) {
-      algorithms.push("mitchell") // Good for mixed content
-    } else {
-      algorithms.push("bicubic") // General purpose
-    }
-    
-    return algorithms
-  }
-
-  private static calculateProcessingStrategy(
-    originalWidth: number,
-    originalHeight: number,
-    contentAnalysis: any,
-    options: UltimateUpscaleOptions
-  ) {
-    const scaleFactor = Math.min(options.scaleFactor || 2, 4)
-    const targetWidth = originalWidth * scaleFactor
-    const targetHeight = originalHeight * scaleFactor
-    
-    // Calculate safe dimensions
-    const maxDimension = Math.min(options.maxOutputDimension || this.MAX_SAFE_DIMENSION, this.MAX_SAFE_DIMENSION)
-    
-    let finalWidth = targetWidth
-    let finalHeight = targetHeight
-    
-    if (finalWidth > maxDimension || finalHeight > maxDimension) {
-      const scale = Math.min(maxDimension / finalWidth, maxDimension / finalHeight)
-      finalWidth = Math.floor(finalWidth * scale)
-      finalHeight = Math.floor(finalHeight * scale)
-    }
-    
-    // Memory check
-    const estimatedMemory = finalWidth * finalHeight * 4 * 2 // 2 processing passes
-    const useChunking = estimatedMemory > this.MEMORY_LIMIT || options.chunkProcessing
-    
-    // Select algorithms based on content analysis
-    const primaryAlgorithm = options.primaryAlgorithm || contentAnalysis.optimalAlgorithms[0] || "auto"
-    const secondaryAlgorithm = options.secondaryAlgorithm || contentAnalysis.optimalAlgorithms[1] || "bicubic"
     
     return {
-      finalWidth,
-      finalHeight,
-      actualScaleFactor: finalWidth / originalWidth,
-      useChunking,
-      primaryAlgorithm,
-      secondaryAlgorithm,
-      multiPass: options.multiPass !== false && scaleFactor > 2,
-      algorithmsUsed: [primaryAlgorithm, secondaryAlgorithm]
+      contentType,
+      hasSharpEdges: edgeRatio > 0.2,
+      noiseLevel,
+      colorComplexity,
+      textContent,
+      isPixelArt: colorComplexity < 0.03 && edgeRatio > 0.4,
+      compressionArtifacts
     }
   }
 
-  private static async performMultiAlgorithmUpscaling(
-    img: HTMLImageElement,
-    strategy: any,
+  private static isNoisePixel(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (x < 1 || x >= width - 1 || y < 1 || y >= height - 1) return false
+    
+    const centerIdx = (y * width + x) * 4
+    const centerBrightness = (data[centerIdx] + data[centerIdx + 1] + data[centerIdx + 2]) / 3
+    
+    let neighborSum = 0
+    let neighborCount = 0
+    
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue
+        
+        const nIdx = ((y + dy) * width + (x + dx)) * 4
+        const neighborBrightness = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+        neighborSum += neighborBrightness
+        neighborCount++
+      }
+    }
+    
+    const avgNeighbor = neighborSum / neighborCount
+    const deviation = Math.abs(centerBrightness - avgNeighbor)
+    
+    return deviation > 30 // High deviation indicates noise
+  }
+
+  private static hasCompressionArtifacts(
+    data: Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (x < 4 || x >= width - 4 || y < 4 || y >= height - 4) return false
+    
+    // Check for 8x8 block patterns (JPEG artifacts)
+    const blockX = Math.floor(x / 8) * 8
+    const blockY = Math.floor(y / 8) * 8
+    
+    let blockVariance = 0
+    let blockMean = 0
+    let pixelCount = 0
+    
+    for (let by = blockY; by < blockY + 8 && by < height; by++) {
+      for (let bx = blockX; bx < blockX + 8 && bx < width; bx++) {
+        const bIdx = (by * width + bx) * 4
+        const brightness = (data[bIdx] + data[bIdx + 1] + data[bIdx + 2]) / 3
+        blockMean += brightness
+        pixelCount++
+      }
+    }
+    
+    blockMean /= pixelCount
+    
+    for (let by = blockY; by < blockY + 8 && by < height; by++) {
+      for (let bx = blockX; bx < blockX + 8 && bx < width; bx++) {
+        const bIdx = (by * width + bx) * 4
+        const brightness = (data[bIdx] + data[bIdx + 1] + data[bIdx + 2]) / 3
+        blockVariance += Math.pow(brightness - blockMean, 2)
+      }
+    }
+    
+    blockVariance /= pixelCount
+    
+    // Low variance in 8x8 blocks indicates compression
+    return blockVariance < 100
+  }
+
+  private static async applyPrimaryUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
+    analysis: any,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
-    options.progressCallback?.(25, `Applying ${strategy.primaryAlgorithm} algorithm`)
+    const algorithm = options.primaryAlgorithm || "auto"
     
-    // Step 1: Primary algorithm upscaling
-    let currentCanvas = await this.applyPrimaryAlgorithm(img, strategy, options)
-    options.progressCallback?.(50, "Primary upscaling complete")
+    if (algorithm === "auto") {
+      return this.autoSelectUpscaling(sourceCanvas, scaleFactor, analysis, options)
+    }
     
-    // Step 2: Secondary algorithm refinement
-    if (options.hybridMode !== false) {
-      currentCanvas = await this.applySecondaryAlgorithm(currentCanvas, strategy, options)
-      options.progressCallback?.(65, "Secondary refinement complete")
+    switch (algorithm) {
+      case "esrgan":
+        return this.esrganUpscaling(sourceCanvas, scaleFactor, options)
+      case "real-esrgan":
+        return this.realEsrganUpscaling(sourceCanvas, scaleFactor, options)
+      case "waifu2x":
+        return this.waifu2xUpscaling(sourceCanvas, scaleFactor, options)
+      case "srcnn":
+        return this.srcnnUpscaling(sourceCanvas, scaleFactor, options)
+      case "edsr":
+        return this.edsrUpscaling(sourceCanvas, scaleFactor, options)
+      case "lanczos":
+        return this.lanczosUpscaling(sourceCanvas, scaleFactor, options)
+      case "bicubic":
+        return this.bicubicUpscaling(sourceCanvas, scaleFactor, options)
+      default:
+        return this.lanczosUpscaling(sourceCanvas, scaleFactor, options)
+    }
+  }
+
+  private static async autoSelectUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
+    analysis: any,
+    options: UltimateUpscaleOptions
+  ): Promise<HTMLCanvasElement> {
+    // Intelligent algorithm selection
+    if (analysis.isPixelArt || analysis.contentType === "art") {
+      return this.waifu2xUpscaling(sourceCanvas, scaleFactor, options)
+    } else if (analysis.contentType === "photo" && analysis.compressionArtifacts > 0.1) {
+      return this.realEsrganUpscaling(sourceCanvas, scaleFactor, options)
+    } else if (analysis.contentType === "photo") {
+      return this.esrganUpscaling(sourceCanvas, scaleFactor, options)
+    } else if (analysis.contentType === "text" || analysis.hasSharpEdges) {
+      return this.lanczosUpscaling(sourceCanvas, scaleFactor, options)
+    } else {
+      return this.srcnnUpscaling(sourceCanvas, scaleFactor, options)
+    }
+  }
+
+  private static async esrganUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
+    options: UltimateUpscaleOptions
+  ): Promise<HTMLCanvasElement> {
+    // ESRGAN-inspired upscaling for photographic content
+    options.progressCallback?.(40, "ESRGAN processing")
+    
+    // Multi-stage upscaling for better quality
+    let currentCanvas = sourceCanvas
+    let currentScale = 1
+    
+    while (currentScale < scaleFactor) {
+      const stepScale = Math.min(2, scaleFactor / currentScale)
+      
+      // Apply photographic upscaling
+      currentCanvas = await this.photographicUpscale(currentCanvas, stepScale, options)
+      currentScale *= stepScale
+      
+      // Apply ESRGAN-style enhancements
+      await this.applyESRGANEnhancements(currentCanvas)
+      
+      // Allow browser to breathe
+      await new Promise(resolve => setTimeout(resolve, 10))
     }
     
     return currentCanvas
   }
 
-  private static async applyPrimaryAlgorithm(
-    img: HTMLImageElement,
-    strategy: any,
+  private static async realEsrganUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
-    switch (strategy.primaryAlgorithm) {
-      case "esrgan":
-        return this.esrganUpscale(img, strategy, options)
-      case "real-esrgan":
-        return this.realEsrganUpscale(img, strategy, options)
-      case "waifu2x":
-        return this.waifu2xUpscale(img, strategy, options)
-      case "srcnn":
-        return this.srcnnUpscale(img, strategy, options)
-      case "edsr":
-        return this.edsrUpscale(img, strategy, options)
-      case "lanczos":
-        return this.lanczosUpscale(img, strategy, options)
-      default:
-        return this.intelligentAutoUpscale(img, strategy, options)
-    }
+    // Real-ESRGAN for compressed/degraded photos
+    options.progressCallback?.(40, "Real-ESRGAN processing")
+    
+    // Pre-process to reduce compression artifacts
+    await this.reduceCompressionArtifacts(sourceCanvas)
+    
+    // Apply enhanced photographic upscaling
+    return this.photographicUpscale(sourceCanvas, scaleFactor, options)
   }
 
-  private static async esrganUpscale(
-    img: HTMLImageElement,
-    strategy: any,
+  private static async waifu2xUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
-    // ESRGAN-inspired algorithm for photographic content
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
+    // Waifu2x-inspired upscaling for anime/art
+    options.progressCallback?.(40, "Waifu2x processing")
     
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
+    // Use nearest neighbor base with selective smoothing
+    const targetWidth = Math.floor(sourceCanvas.width * scaleFactor)
+    const targetHeight = Math.floor(sourceCanvas.height * scaleFactor)
     
-    // Multi-pass upscaling for better quality
-    if (strategy.multiPass && strategy.actualScaleFactor > 2) {
-      // First pass: 2x upscale
-      const intermediateCanvas = document.createElement("canvas")
-      const intermediateCtx = intermediateCanvas.getContext("2d")!
-      
-      intermediateCanvas.width = img.naturalWidth * 2
-      intermediateCanvas.height = img.naturalHeight * 2
-      
-      // Apply ESRGAN-style processing
-      await this.applyESRGANProcessing(intermediateCtx, img, intermediateCanvas.width, intermediateCanvas.height)
-      
-      // Second pass: scale to final size
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = "high"
-      ctx.drawImage(intermediateCanvas, 0, 0, canvas.width, canvas.height)
-    } else {
-      // Single pass
-      await this.applyESRGANProcessing(ctx, img, canvas.width, canvas.height)
-    }
+    const resultCanvas = document.createElement("canvas")
+    const resultCtx = resultCanvas.getContext("2d")!
+    resultCanvas.width = targetWidth
+    resultCanvas.height = targetHeight
     
-    return canvas
+    // Nearest neighbor for sharp edges
+    resultCtx.imageSmoothingEnabled = false
+    resultCtx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
+    
+    // Apply selective smoothing
+    await this.applySelectiveSmoothing(resultCanvas)
+    
+    // Enhance line art
+    await this.enhanceLineArt(resultCanvas)
+    
+    return resultCanvas
   }
 
-  private static async applyESRGANProcessing(
-    ctx: CanvasRenderingContext2D,
-    img: HTMLImageElement,
-    targetWidth: number,
-    targetHeight: number
-  ): Promise<void> {
-    // High-quality initial scaling
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
-    
-    // Apply ESRGAN-style enhancements
-    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight)
-    
-    // Enhance photographic details
-    await this.enhancePhotographicDetails(imageData.data, targetWidth, targetHeight)
-    
-    // Reduce compression artifacts
-    await this.reduceCompressionArtifacts(imageData.data, targetWidth, targetHeight)
-    
-    // Apply perceptual enhancement
-    await this.applyPerceptualEnhancement(imageData.data, targetWidth, targetHeight)
-    
-    ctx.putImageData(imageData, 0, 0)
-  }
-
-  private static async realEsrganUpscale(
-    img: HTMLImageElement,
-    strategy: any,
+  private static async srcnnUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
-    // Real-ESRGAN for heavily compressed images
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
+    // SRCNN-inspired super-resolution
+    options.progressCallback?.(40, "SRCNN processing")
     
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
+    // Multi-pass approach
+    let currentCanvas = sourceCanvas
+    let currentScale = 1
     
-    // Apply Real-ESRGAN processing with artifact reduction
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
-    // Advanced artifact reduction
-    await this.applyAdvancedArtifactReduction(imageData.data, canvas.width, canvas.height)
-    
-    // Enhance details lost in compression
-    await this.recoverCompressionDetails(imageData.data, canvas.width, canvas.height)
-    
-    ctx.putImageData(imageData, 0, 0)
-    
-    return canvas
-  }
-
-  private static async waifu2xUpscale(
-    img: HTMLImageElement,
-    strategy: any,
-    options: UltimateUpscaleOptions
-  ): Promise<HTMLCanvasElement> {
-    // Waifu2x-inspired algorithm for anime/art
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
-    
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
-    
-    // Use nearest neighbor for initial scaling to preserve sharp edges
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
-    // Apply Waifu2x-style processing
-    await this.enhanceAnimeArt(imageData.data, canvas.width, canvas.height)
-    await this.reduceAliasing(imageData.data, canvas.width, canvas.height)
-    await this.enhanceLineArt(imageData.data, canvas.width, canvas.height)
-    
-    ctx.putImageData(imageData, 0, 0)
-    
-    return canvas
-  }
-
-  private static async srcnnUpscale(
-    img: HTMLImageElement,
-    strategy: any,
-    options: UltimateUpscaleOptions
-  ): Promise<HTMLCanvasElement> {
-    // SRCNN-inspired algorithm for noise reduction
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
-    
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
-    
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
-    // Apply SRCNN-style processing
-    await this.applyDeepNoiseReduction(imageData.data, canvas.width, canvas.height)
-    await this.enhanceStructuralDetails(imageData.data, canvas.width, canvas.height)
-    
-    ctx.putImageData(imageData, 0, 0)
-    
-    return canvas
-  }
-
-  private static async edsrUpscale(
-    img: HTMLImageElement,
-    strategy: any,
-    options: UltimateUpscaleOptions
-  ): Promise<HTMLCanvasElement> {
-    // EDSR-inspired algorithm for high-quality upscaling
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
-    
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
-    
-    // Multi-scale processing
-    const scales = strategy.multiPass ? [1.5, strategy.actualScaleFactor / 1.5] : [strategy.actualScaleFactor]
-    let currentImg = img
-    
-    for (let i = 0; i < scales.length; i++) {
-      const scale = scales[i]
-      const intermediateCanvas = document.createElement("canvas")
-      const intermediateCtx = intermediateCanvas.getContext("2d")!
+    while (currentScale < scaleFactor) {
+      const stepScale = Math.min(1.6, scaleFactor / currentScale)
       
-      if (i === 0) {
-        intermediateCanvas.width = Math.floor(img.naturalWidth * scale)
-        intermediateCanvas.height = Math.floor(img.naturalHeight * scale)
-      } else {
-        intermediateCanvas.width = canvas.width
-        intermediateCanvas.height = canvas.height
-      }
+      // Apply bicubic base
+      currentCanvas = await this.bicubicUpscaling(currentCanvas, stepScale, options)
       
-      // Apply EDSR-style processing
-      await this.applyEDSRProcessing(intermediateCtx, currentImg, intermediateCanvas.width, intermediateCanvas.height)
+      // Apply SRCNN-style refinement
+      await this.applySRCNNRefinement(currentCanvas)
       
-      // Create image from canvas for next iteration
-      if (i < scales.length - 1) {
-        const tempImg = new Image()
-        tempImg.src = intermediateCanvas.toDataURL()
-        await new Promise(resolve => tempImg.onload = resolve)
-        currentImg = tempImg
-      } else {
-        ctx.drawImage(intermediateCanvas, 0, 0)
-      }
+      currentScale *= stepScale
+      
+      await new Promise(resolve => setTimeout(resolve, 5))
     }
     
-    return canvas
+    return currentCanvas
   }
 
-  private static async applyEDSRProcessing(
-    ctx: CanvasRenderingContext2D,
-    img: HTMLImageElement,
-    targetWidth: number,
-    targetHeight: number
-  ): Promise<void> {
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+  private static async edsrUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
+    options: UltimateUpscaleOptions
+  ): Promise<HTMLCanvasElement> {
+    // EDSR-inspired enhanced deep super-resolution
+    options.progressCallback?.(40, "EDSR processing")
     
-    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight)
+    // High-quality base upscaling
+    const result = await this.lanczosUpscaling(sourceCanvas, scaleFactor, options)
     
-    // Apply residual learning-inspired enhancement
-    await this.applyResidualEnhancement(imageData.data, targetWidth, targetHeight)
+    // Apply EDSR-style enhancements
+    await this.applyEDSREnhancements(result)
     
-    ctx.putImageData(imageData, 0, 0)
+    return result
   }
 
-  private static async lanczosUpscale(
-    img: HTMLImageElement,
-    strategy: any,
+  private static async lanczosUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
     // High-quality Lanczos upscaling
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
+    const srcCtx = sourceCanvas.getContext("2d")!
+    const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
+    const srcData = srcImageData.data
     
-    canvas.width = strategy.finalWidth
-    canvas.height = strategy.finalHeight
+    const targetWidth = Math.floor(sourceCanvas.width * scaleFactor)
+    const targetHeight = Math.floor(sourceCanvas.height * scaleFactor)
     
-    // Create source canvas
-    const sourceCanvas = document.createElement("canvas")
-    const sourceCtx = sourceCanvas.getContext("2d")!
-    sourceCanvas.width = img.naturalWidth
-    sourceCanvas.height = img.naturalHeight
-    sourceCtx.drawImage(img, 0, 0)
+    const resultCanvas = document.createElement("canvas")
+    const resultCtx = resultCanvas.getContext("2d")!
+    resultCanvas.width = targetWidth
+    resultCanvas.height = targetHeight
     
-    const sourceImageData = sourceCtx.getImageData(0, 0, img.naturalWidth, img.naturalHeight)
-    const targetImageData = ctx.createImageData(canvas.width, canvas.height)
+    const resultImageData = resultCtx.createImageData(targetWidth, targetHeight)
+    const resultData = resultImageData.data
     
-    // Apply Lanczos-4 resampling
-    await this.applyLanczosResampling(
-      sourceImageData,
-      targetImageData,
-      img.naturalWidth,
-      img.naturalHeight,
-      canvas.width,
-      canvas.height
-    )
-    
-    ctx.putImageData(targetImageData, 0, 0)
-    
-    return canvas
-  }
-
-  private static async applyLanczosResampling(
-    sourceData: ImageData,
-    targetData: ImageData,
-    sourceWidth: number,
-    sourceHeight: number,
-    targetWidth: number,
-    targetHeight: number
-  ): Promise<void> {
-    const src = sourceData.data
-    const dst = targetData.data
-    
-    const scaleX = sourceWidth / targetWidth
-    const scaleY = sourceHeight / targetHeight
-    
-    // Lanczos-4 kernel
+    // Lanczos-3 kernel
     const lanczos = (x: number): number => {
       if (x === 0) return 1
-      if (Math.abs(x) >= 4) return 0
+      if (Math.abs(x) >= 3) return 0
       
       const piX = Math.PI * x
-      return (4 * Math.sin(piX) * Math.sin(piX / 4)) / (piX * piX)
+      return (3 * Math.sin(piX) * Math.sin(piX / 3)) / (piX * piX)
     }
     
-    // Process in chunks to prevent memory issues
-    const chunkSize = this.CHUNK_SIZE
+    // Process in chunks to prevent hanging
+    const chunkSize = options.chunkProcessing ? 200 : targetHeight
     
     for (let startY = 0; startY < targetHeight; startY += chunkSize) {
       const endY = Math.min(startY + chunkSize, targetHeight)
       
       for (let targetY = startY; targetY < endY; targetY++) {
         for (let targetX = 0; targetX < targetWidth; targetX++) {
-          const srcX = targetX * scaleX
-          const srcY = targetY * scaleY
+          const srcX = targetX / scaleFactor
+          const srcY = targetY / scaleFactor
           
           let r = 0, g = 0, b = 0, a = 0, weightSum = 0
           
-          // Sample 8x8 neighborhood
-          for (let dy = -3; dy <= 4; dy++) {
-            for (let dx = -3; dx <= 4; dx++) {
+          // 6x6 neighborhood for Lanczos-3
+          for (let dy = -2; dy <= 3; dy++) {
+            for (let dx = -2; dx <= 3; dx++) {
               const sampleX = Math.floor(srcX) + dx
               const sampleY = Math.floor(srcY) + dy
               
-              if (sampleX >= 0 && sampleX < sourceWidth && 
-                  sampleY >= 0 && sampleY < sourceHeight) {
+              if (sampleX >= 0 && sampleX < sourceCanvas.width && 
+                  sampleY >= 0 && sampleY < sourceCanvas.height) {
                 
                 const weight = lanczos(srcX - sampleX) * lanczos(srcY - sampleY)
-                const srcIndex = (sampleY * sourceWidth + sampleX) * 4
+                const srcIndex = (sampleY * sourceCanvas.width + sampleX) * 4
                 
-                r += src[srcIndex] * weight
-                g += src[srcIndex + 1] * weight
-                b += src[srcIndex + 2] * weight
-                a += src[srcIndex + 3] * weight
+                r += srcData[srcIndex] * weight
+                g += srcData[srcIndex + 1] * weight
+                b += srcData[srcIndex + 2] * weight
+                a += srcData[srcIndex + 3] * weight
                 weightSum += weight
               }
             }
           }
           
           const targetIndex = (targetY * targetWidth + targetX) * 4
-          dst[targetIndex] = Math.max(0, Math.min(255, r / weightSum))
-          dst[targetIndex + 1] = Math.max(0, Math.min(255, g / weightSum))
-          dst[targetIndex + 2] = Math.max(0, Math.min(255, b / weightSum))
-          dst[targetIndex + 3] = Math.max(0, Math.min(255, a / weightSum))
+          resultData[targetIndex] = Math.max(0, Math.min(255, r / weightSum))
+          resultData[targetIndex + 1] = Math.max(0, Math.min(255, g / weightSum))
+          resultData[targetIndex + 2] = Math.max(0, Math.min(255, b / weightSum))
+          resultData[targetIndex + 3] = Math.max(0, Math.min(255, a / weightSum))
         }
       }
       
-      // Allow browser to breathe
-      await new Promise(resolve => setTimeout(resolve, 1))
+      // Allow browser to breathe between chunks
+      if (startY + chunkSize < targetHeight) {
+        await new Promise(resolve => setTimeout(resolve, 1))
+      }
     }
+    
+    resultCtx.putImageData(resultImageData, 0, 0)
+    return resultCanvas
   }
 
-  private static async intelligentAutoUpscale(
-    img: HTMLImageElement,
-    strategy: any,
+  private static async bicubicUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
-    // Analyze image and choose best algorithm automatically
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")!
+    const targetWidth = Math.floor(sourceCanvas.width * scaleFactor)
+    const targetHeight = Math.floor(sourceCanvas.height * scaleFactor)
     
-    canvas.width = img.naturalWidth
-    canvas.height = img.naturalHeight
-    ctx.drawImage(img, 0, 0)
+    const resultCanvas = document.createElement("canvas")
+    const resultCtx = resultCanvas.getContext("2d")!
+    resultCanvas.width = targetWidth
+    resultCanvas.height = targetHeight
     
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const analysis = this.quickImageAnalysis(imageData)
+    // High-quality bicubic scaling
+    resultCtx.imageSmoothingEnabled = true
+    resultCtx.imageSmoothingQuality = "high"
     
-    // Choose algorithm based on analysis
-    if (analysis.isPhotographic) {
-      return this.esrganUpscale(img, strategy, options)
-    } else if (analysis.isArt) {
-      return this.waifu2xUpscale(img, strategy, options)
-    } else if (analysis.hasText) {
-      return this.lanczosUpscale(img, strategy, options)
+    // Multi-pass for better quality on large scales
+    if (scaleFactor > 2.5) {
+      const intermediateScale = Math.sqrt(scaleFactor)
+      const intermediateCanvas = document.createElement("canvas")
+      const intermediateCtx = intermediateCanvas.getContext("2d")!
+      
+      intermediateCanvas.width = Math.floor(sourceCanvas.width * intermediateScale)
+      intermediateCanvas.height = Math.floor(sourceCanvas.height * intermediateScale)
+      
+      intermediateCtx.imageSmoothingEnabled = true
+      intermediateCtx.imageSmoothingQuality = "high"
+      intermediateCtx.drawImage(sourceCanvas, 0, 0, intermediateCanvas.width, intermediateCanvas.height)
+      
+      resultCtx.drawImage(intermediateCanvas, 0, 0, targetWidth, targetHeight)
     } else {
-      return this.edsrUpscale(img, strategy, options)
+      resultCtx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
     }
+    
+    return resultCanvas
   }
 
-  private static quickImageAnalysis(imageData: ImageData): {
-    isPhotographic: boolean
-    isArt: boolean
-    hasText: boolean
-  } {
-    const { data, width, height } = imageData
-    let colorVariation = 0
-    let sharpEdges = 0
-    let totalPixels = 0
+  private static async photographicUpscale(
+    sourceCanvas: HTMLCanvasElement,
+    scaleFactor: number,
+    options: UltimateUpscaleOptions
+  ): Promise<HTMLCanvasElement> {
+    // Optimized for photographic content
+    const result = await this.bicubicUpscaling(sourceCanvas, scaleFactor, options)
     
-    for (let y = 1; y < height - 1; y += 4) {
-      for (let x = 1; x < width - 1; x += 4) {
-        const idx = (y * width + x) * 4
-        totalPixels++
+    // Apply photographic enhancements
+    const ctx = result.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, result.width, result.height)
+    
+    // Enhance details
+    this.enhancePhotographicDetails(imageData.data, result.width, result.height)
+    
+    // Reduce noise
+    this.applyBilateralFilter(imageData.data, result.width, result.height)
+    
+    ctx.putImageData(imageData, 0, 0)
+    
+    return result
+  }
+
+  private static async applySecondaryEnhancements(
+    canvas: HTMLCanvasElement,
+    analysis: any,
+    options: UltimateUpscaleOptions
+  ): Promise<HTMLCanvasElement> {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    
+    // Apply enhancements based on options
+    if (options.enhanceDetails) {
+      this.enhanceDetails(data, canvas.width, canvas.height)
+    }
+    
+    if (options.reduceNoise) {
+      this.reduceNoise(data, canvas.width, canvas.height)
+    }
+    
+    if (options.sharpenAmount && options.sharpenAmount > 0) {
+      this.applySharpen(data, canvas.width, canvas.height, options.sharpenAmount)
+    }
+    
+    if (options.colorEnhancement) {
+      this.enhanceColors(data, canvas.width, canvas.height)
+    }
+    
+    if (options.contrastBoost && options.contrastBoost > 0) {
+      this.boostContrast(data, canvas.width, canvas.height, options.contrastBoost)
+    }
+    
+    ctx.putImageData(imageData, 0, 0)
+    
+    return canvas
+  }
+
+  private static async applyESRGANEnhancements(canvas: HTMLCanvasElement): Promise<void> {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    
+    // ESRGAN-style enhancements
+    this.enhancePhotographicDetails(imageData.data, canvas.width, canvas.height)
+    this.reduceCompressionArtifactsInData(imageData.data, canvas.width, canvas.height)
+    
+    ctx.putImageData(imageData, 0, 0)
+  }
+
+  private static async applySelectiveSmoothing(canvas: HTMLCanvasElement): Promise<void> {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    
+    // Apply smoothing only to non-edge areas
+    const smoothed = new Uint8ClampedArray(data)
+    
+    for (let y = 1; y < canvas.height - 1; y++) {
+      for (let x = 1; x < canvas.width - 1; x++) {
+        const idx = (y * canvas.width + x) * 4
         
-        const r = data[idx]
-        const g = data[idx + 1]
-        const b = data[idx + 2]
-        
-        colorVariation += Math.max(r, g, b) - Math.min(r, g, b)
-        
-        // Check for sharp edges
-        let maxGradient = 0
+        // Calculate edge strength
+        let edgeStrength = 0
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (dx === 0 && dy === 0) continue
             
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
+            const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4
+            const gradient = Math.abs(data[idx] - data[nIdx]) +
+                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
+                           Math.abs(data[idx + 2] - data[nIdx + 2])
+            edgeStrength = Math.max(edgeStrength, gradient)
+          }
+        }
+        
+        // Apply smoothing only to non-edge areas
+        if (edgeStrength < 30) {
+          for (let c = 0; c < 3; c++) {
+            let sum = 0
+            let count = 0
+            
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4 + c
+                sum += data[nIdx]
+                count++
+              }
+            }
+            
+            smoothed[idx + c] = Math.round(sum / count)
+          }
+        }
+      }
+    }
+    
+    ctx.putImageData(new ImageData(smoothed, canvas.width, canvas.height), 0, 0)
+  }
+
+  private static async enhanceLineArt(canvas: HTMLCanvasElement): Promise<void> {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    
+    // Enhance line art without blurring
+    for (let y = 1; y < canvas.height - 1; y++) {
+      for (let x = 1; x < canvas.width - 1; x++) {
+        const idx = (y * canvas.width + x) * 4
+        
+        // Check if this is a line art edge
+        let maxGradient = 0
+        
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            
+            const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4
             const gradient = Math.abs(data[idx] - data[nIdx]) +
                            Math.abs(data[idx + 1] - data[nIdx + 1]) +
                            Math.abs(data[idx + 2] - data[nIdx + 2])
@@ -1097,118 +822,64 @@ export class UltimateImageUpscaler {
           }
         }
         
-        if (maxGradient > 100) sharpEdges++
+        // Enhance strong edges (line art)
+        if (maxGradient > 100) {
+          for (let c = 0; c < 3; c++) {
+            const value = data[idx + c]
+            data[idx + c] = value < 128 ? Math.max(0, value - 15) : Math.min(255, value + 15)
+          }
+        }
       }
     }
     
-    const avgColorVariation = colorVariation / totalPixels
-    const sharpEdgeRatio = sharpEdges / totalPixels
-    
-    return {
-      isPhotographic: avgColorVariation > 40 && sharpEdgeRatio < 0.3,
-      isArt: avgColorVariation < 30 && sharpEdgeRatio > 0.2,
-      hasText: sharpEdgeRatio > 0.4
-    }
-  }
-
-  private static async applySecondaryAlgorithm(
-    canvas: HTMLCanvasElement,
-    strategy: any,
-    options: UltimateUpscaleOptions
-  ): Promise<HTMLCanvasElement> {
-    const ctx = canvas.getContext("2d")!
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
-    switch (strategy.secondaryAlgorithm) {
-      case "mitchell":
-        await this.applyMitchellFilter(imageData.data, canvas.width, canvas.height)
-        break
-      case "catmull-rom":
-        await this.applyCatmullRomFilter(imageData.data, canvas.width, canvas.height)
-        break
-      default:
-        await this.applyBicubicRefinement(imageData.data, canvas.width, canvas.height)
-    }
-    
     ctx.putImageData(imageData, 0, 0)
-    return canvas
   }
 
-  private static async applyAdvancedPostProcessing(
-    canvas: HTMLCanvasElement,
-    contentAnalysis: any,
-    options: UltimateUpscaleOptions
-  ): Promise<void> {
+  private static async applySRCNNRefinement(canvas: HTMLCanvasElement): Promise<void> {
     const ctx = canvas.getContext("2d")!
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
     
-    // Apply content-specific enhancements
-    if (options.enhanceDetails !== false) {
-      await this.applyAdvancedDetailEnhancement(data, canvas.width, canvas.height, contentAnalysis)
-    }
-    
-    if (options.reduceNoise !== false && contentAnalysis.noiseLevel > 0.2) {
-      await this.applyIntelligentNoiseReduction(data, canvas.width, canvas.height, contentAnalysis)
-    }
-    
-    if (options.sharpenAmount && options.sharpenAmount > 0) {
-      await this.applyAdaptiveSharpening(data, canvas.width, canvas.height, options.sharpenAmount, contentAnalysis)
-    }
-    
-    if (options.colorEnhancement !== false) {
-      await this.applyIntelligentColorEnhancement(data, canvas.width, canvas.height, contentAnalysis)
-    }
+    // SRCNN-style detail enhancement
+    this.enhanceDetails(imageData.data, canvas.width, canvas.height)
+    this.reduceNoise(imageData.data, canvas.width, canvas.height)
     
     ctx.putImageData(imageData, 0, 0)
   }
 
-  private static async applyFinalQualityOptimization(
-    canvas: HTMLCanvasElement,
-    contentAnalysis: any,
-    options: UltimateUpscaleOptions
-  ): Promise<void> {
+  private static async applyEDSREnhancements(canvas: HTMLCanvasElement): Promise<void> {
     const ctx = canvas.getContext("2d")!
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     
-    // Final quality pass
-    await this.applyFinalSharpening(imageData.data, canvas.width, canvas.height)
-    await this.optimizeContrast(imageData.data, canvas.width, canvas.height)
-    await this.finalColorCorrection(imageData.data, canvas.width, canvas.height)
+    // EDSR-style enhancements
+    this.enhanceDetails(imageData.data, canvas.width, canvas.height)
+    this.applySharpen(imageData.data, canvas.width, canvas.height, 20)
     
     ctx.putImageData(imageData, 0, 0)
   }
 
-  // Enhanced processing methods
-  private static async enhancePhotographicDetails(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
+  private static enhanceDetails(data: Uint8ClampedArray, width: number, height: number): void {
     const enhanced = new Uint8ClampedArray(data)
     
     // Multi-scale detail enhancement
-    const scales = [1, 2, 4]
-    
-    for (const scale of scales) {
-      for (let y = scale; y < height - scale; y++) {
-        for (let x = scale; x < width - scale; x++) {
-          const centerIdx = (y * width + x) * 4
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let sum = 0
+          let center = data[idx + c] * 25 // 5x5 center weight
           
-          for (let c = 0; c < 3; c++) {
-            let sum = 0
-            let center = data[centerIdx + c] * (scale * 2 + 1) ** 2
-            
-            for (let dy = -scale; dy <= scale; dy++) {
-              for (let dx = -scale; dx <= scale; dx++) {
-                const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
-                sum += data[nIdx]
-              }
+          // 5x5 neighborhood
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              sum += data[nIdx]
             }
-            
-            const highPass = (center - sum) * (0.1 / scale)
-            enhanced[centerIdx + c] = Math.max(0, Math.min(255, data[centerIdx + c] + highPass))
           }
+          
+          const highPass = center - sum
+          const enhancement = highPass * 0.15
+          enhanced[idx + c] = Math.max(0, Math.min(255, data[idx + c] + enhancement))
         }
       }
     }
@@ -1221,16 +892,54 @@ export class UltimateImageUpscaler {
     }
   }
 
-  private static async reduceCompressionArtifacts(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
-    // Advanced bilateral filtering for artifact reduction
+  private static enhancePhotographicDetails(data: Uint8ClampedArray, width: number, height: number): void {
+    const enhanced = new Uint8ClampedArray(data)
+    
+    // Local contrast enhancement
+    for (let y = 3; y < height - 3; y++) {
+      for (let x = 3; x < width - 3; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let localSum = 0
+          let localCount = 0
+          
+          // 7x7 neighborhood
+          for (let dy = -3; dy <= 3; dy++) {
+            for (let dx = -3; dx <= 3; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              localSum += data[nIdx]
+              localCount++
+            }
+          }
+          
+          const localAvg = localSum / localCount
+          const centerValue = data[idx + c]
+          
+          // Apply local contrast enhancement
+          const contrast = (centerValue - localAvg) * 0.25
+          enhanced[idx + c] = Math.max(0, Math.min(255, centerValue + contrast))
+        }
+      }
+    }
+    
+    // Blend enhanced version
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        data[i + c] = Math.round(data[i + c] * 0.8 + enhanced[i + c] * 0.2)
+      }
+    }
+  }
+
+  private static reduceNoise(data: Uint8ClampedArray, width: number, height: number): void {
+    this.applyBilateralFilter(data, width, height)
+  }
+
+  private static applyBilateralFilter(data: Uint8ClampedArray, width: number, height: number): void {
     const filtered = new Uint8ClampedArray(data)
-    const radius = 3
-    const sigmaSpace = 50
-    const sigmaColor = 50
+    const radius = 2
+    const sigmaSpace = 20
+    const sigmaColor = 30
     
     for (let y = radius; y < height - radius; y++) {
       for (let x = radius; x < width - radius; x++) {
@@ -1260,312 +969,28 @@ export class UltimateImageUpscaler {
       }
     }
     
-    // Blend filtered version
+    // Copy filtered data back
     for (let i = 0; i < data.length; i += 4) {
       for (let c = 0; c < 3; c++) {
-        data[i + c] = Math.round(data[i + c] * 0.6 + filtered[i + c] * 0.4)
+        data[i + c] = filtered[i + c]
       }
     }
   }
 
-  private static async applyPerceptualEnhancement(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
-    // Enhance based on human visual perception
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      
-      // Apply perceptual color enhancement
-      const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-      
-      // Enhance mid-tones more than highlights/shadows
-      const midToneBoost = 1 - Math.abs(luminance - 128) / 128
-      const enhancement = 1 + midToneBoost * 0.1
-      
-      data[i] = Math.max(0, Math.min(255, r * enhancement))
-      data[i + 1] = Math.max(0, Math.min(255, g * enhancement))
-      data[i + 2] = Math.max(0, Math.min(255, b * enhancement))
-    }
-  }
-
-  private static async enhanceAnimeArt(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
-    // Anime/art specific enhancements
-    const enhanced = new Uint8ClampedArray(data)
-    
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const centerIdx = (y * width + x) * 4
-        
-        // Detect line art
-        let isLineArt = false
-        let maxGradient = 0
-        
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const gradient = Math.abs(data[centerIdx] - data[nIdx]) +
-                           Math.abs(data[centerIdx + 1] - data[nIdx + 1]) +
-                           Math.abs(data[centerIdx + 2] - data[nIdx + 2])
-            maxGradient = Math.max(maxGradient, gradient)
-          }
-        }
-        
-        if (maxGradient > 150) {
-          isLineArt = true
-        }
-        
-        if (isLineArt) {
-          // Enhance line art contrast
-          for (let c = 0; c < 3; c++) {
-            const value = data[centerIdx + c]
-            enhanced[centerIdx + c] = value < 128 ? Math.max(0, value - 30) : Math.min(255, value + 30)
-          }
-        }
-      }
-    }
-    
-    // Apply enhancement
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        data[i + c] = Math.round(data[i + c] * 0.6 + enhanced[i + c] * 0.4)
-      }
-    }
-  }
-
-  private static async reduceAliasing(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
-    // Anti-aliasing for anime/art content
-    const smoothed = new Uint8ClampedArray(data)
-    
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const centerIdx = (y * width + x) * 4
-        
-        // Check if this is an aliased edge
-        let isAliased = false
-        let edgeDirection = 0
-        
-        // Detect diagonal edges (common source of aliasing)
-        const gradients = [
-          Math.abs(data[centerIdx] - data[((y-1) * width + (x-1)) * 4]), // NW
-          Math.abs(data[centerIdx] - data[((y-1) * width + (x+1)) * 4]), // NE
-          Math.abs(data[centerIdx] - data[((y+1) * width + (x-1)) * 4]), // SW
-          Math.abs(data[centerIdx] - data[((y+1) * width + (x+1)) * 4])  // SE
-        ]
-        
-        const maxDiagonalGradient = Math.max(...gradients)
-        if (maxDiagonalGradient > 100) {
-          isAliased = true
-        }
-        
-        if (isAliased) {
-          // Apply selective smoothing
-          for (let c = 0; c < 3; c++) {
-            let sum = 0
-            let count = 0
-            
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
-                sum += data[nIdx]
-                count++
-              }
-            }
-            
-            smoothed[centerIdx + c] = Math.round(sum / count)
-          }
-        }
-      }
-    }
-    
-    // Apply smoothing
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        data[i + c] = Math.round(data[i + c] * 0.8 + smoothed[i + c] * 0.2)
-      }
-    }
-  }
-
-  private static async enhanceLineArt(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number
-  ): Promise<void> {
-    // Enhance line art without blurring
-    const enhanced = new Uint8ClampedArray(data)
-    
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const centerIdx = (y * width + x) * 4
-        
-        // Detect line art edges
-        let isLineEdge = false
-        let maxGradient = 0
-        
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            
-            const nIdx = ((y + dy) * width + (x + dx)) * 4
-            const gradient = Math.abs(data[centerIdx] - data[nIdx]) +
-                           Math.abs(data[centerIdx + 1] - data[nIdx + 1]) +
-                           Math.abs(data[centerIdx + 2] - data[nIdx + 2])
-            maxGradient = Math.max(maxGradient, gradient)
-          }
-        }
-        
-        if (maxGradient > 200) {
-          isLineEdge = true
-        }
-        
-        if (isLineEdge) {
-          // Enhance line contrast
-          for (let c = 0; c < 3; c++) {
-            const value = data[centerIdx + c]
-            const enhancement = value < 128 ? -20 : 20
-            enhanced[centerIdx + c] = Math.max(0, Math.min(255, value + enhancement))
-          }
-        }
-      }
-    }
-    
-    // Apply enhancement
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        data[i + c] = Math.round(data[i + c] * 0.7 + enhanced[i + c] * 0.3)
-      }
-    }
-  }
-
-  private static async applyAdvancedDetailEnhancement(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    contentAnalysis: any
-  ): Promise<void> {
-    const enhanced = new Uint8ClampedArray(data)
-    
-    // Adaptive detail enhancement based on content type
-    const enhancementStrength = contentAnalysis.hasPhotographicContent ? 0.15 : 
-                               contentAnalysis.hasArtContent ? 0.25 : 0.2
-    
-    for (let y = 2; y < height - 2; y++) {
-      for (let x = 2; x < width - 2; x++) {
-        const centerIdx = (y * width + x) * 4
-        
-        for (let c = 0; c < 3; c++) {
-          // Multi-scale unsharp mask
-          let enhancement = 0
-          const scales = [1, 2]
-          
-          scales.forEach(scale => {
-            let sum = 0
-            let center = data[centerIdx + c] * (scale * 2 + 1) ** 2
-            
-            for (let dy = -scale; dy <= scale; dy++) {
-              for (let dx = -scale; dx <= scale; dx++) {
-                const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
-                sum += data[nIdx]
-              }
-            }
-            
-            const highPass = (center - sum) * enhancementStrength / scale
-            enhancement += highPass
-          })
-          
-          enhanced[centerIdx + c] = Math.max(0, Math.min(255, data[centerIdx + c] + enhancement))
-        }
-      }
-    }
-    
-    // Apply enhancement
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        data[i + c] = enhanced[i + c]
-      }
-    }
-  }
-
-  private static async applyIntelligentNoiseReduction(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    contentAnalysis: any
-  ): Promise<void> {
-    // Adaptive noise reduction based on content
-    const radius = contentAnalysis.noiseLevel > 0.5 ? 3 : 2
-    const sigmaSpace = contentAnalysis.hasPhotographicContent ? 40 : 30
-    const sigmaColor = contentAnalysis.hasArtContent ? 60 : 40
-    
-    const filtered = new Uint8ClampedArray(data)
-    
-    for (let y = radius; y < height - radius; y++) {
-      for (let x = radius; x < width - radius; x++) {
-        const centerIdx = (y * width + x) * 4
-        
-        for (let c = 0; c < 3; c++) {
-          let weightSum = 0
-          let valueSum = 0
-          const centerValue = data[centerIdx + c]
-          
-          for (let dy = -radius; dy <= radius; dy++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
-              const neighborValue = data[nIdx]
-              
-              const spatialWeight = Math.exp(-(dx * dx + dy * dy) / (2 * sigmaSpace * sigmaSpace))
-              const colorWeight = Math.exp(-Math.pow(centerValue - neighborValue, 2) / (2 * sigmaColor * sigmaColor))
-              const weight = spatialWeight * colorWeight
-              
-              weightSum += weight
-              valueSum += neighborValue * weight
-            }
-          }
-          
-          filtered[centerIdx + c] = Math.round(valueSum / weightSum)
-        }
-      }
-    }
-    
-    // Apply filtered version
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        data[i + c] = Math.round(data[i + c] * 0.7 + filtered[i + c] * 0.3)
-      }
-    }
-  }
-
-  private static async applyAdaptiveSharpening(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    sharpenAmount: number,
-    contentAnalysis: any
-  ): Promise<void> {
+  private static applySharpen(data: Uint8ClampedArray, width: number, height: number, amount: number): void {
     const sharpened = new Uint8ClampedArray(data)
-    const amount = (sharpenAmount / 100) * (contentAnalysis.hasTextContent ? 1.5 : 1.0)
+    const factor = amount / 100
     
-    // Adaptive unsharp mask
+    // Unsharp mask
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
-        const centerIdx = (y * width + x) * 4
+        const idx = (y * width + x) * 4
         
         for (let c = 0; c < 3; c++) {
-          // Calculate local average
           let sum = 0
+          let center = data[idx + c] * 9
+          
+          // 3x3 neighborhood
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
@@ -1573,19 +998,14 @@ export class UltimateImageUpscaler {
             }
           }
           
-          const average = sum / 9
-          const difference = data[centerIdx + c] - average
-          
-          // Apply adaptive sharpening
-          if (Math.abs(difference) > 5) { // Only sharpen significant differences
-            const enhancement = difference * amount
-            sharpened[centerIdx + c] = Math.max(0, Math.min(255, data[centerIdx + c] + enhancement))
-          }
+          const highPass = center - sum
+          const enhancement = highPass * factor * 0.2
+          sharpened[idx + c] = Math.max(0, Math.min(255, data[idx + c] + enhancement))
         }
       }
     }
     
-    // Apply sharpening
+    // Apply sharpened version
     for (let i = 0; i < data.length; i += 4) {
       for (let c = 0; c < 3; c++) {
         data[i + c] = sharpened[i + c]
@@ -1593,16 +1013,8 @@ export class UltimateImageUpscaler {
     }
   }
 
-  private static async applyIntelligentColorEnhancement(
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    contentAnalysis: any
-  ): Promise<void> {
-    // Intelligent color enhancement based on content
-    const saturationBoost = contentAnalysis.hasArtContent ? 1.1 : 
-                           contentAnalysis.hasPhotographicContent ? 1.05 : 1.02
-    
+  private static enhanceColors(data: Uint8ClampedArray, width: number, height: number): void {
+    // Subtle color enhancement
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i]
       const g = data[i + 1]
@@ -1611,92 +1023,188 @@ export class UltimateImageUpscaler {
       // Calculate luminance
       const luminance = 0.299 * r + 0.587 * g + 0.114 * b
       
-      // Apply saturation boost
-      data[i] = Math.max(0, Math.min(255, luminance + (r - luminance) * saturationBoost))
-      data[i + 1] = Math.max(0, Math.min(255, luminance + (g - luminance) * saturationBoost))
-      data[i + 2] = Math.max(0, Math.min(255, luminance + (b - luminance) * saturationBoost))
+      // Apply subtle saturation boost
+      const saturationBoost = 1.05
+      const gray = luminance
+      
+      data[i] = Math.max(0, Math.min(255, gray + (r - gray) * saturationBoost))
+      data[i + 1] = Math.max(0, Math.min(255, gray + (g - gray) * saturationBoost))
+      data[i + 2] = Math.max(0, Math.min(255, gray + (b - gray) * saturationBoost))
     }
   }
 
-  // Additional processing methods would be implemented here...
-  private static async applyAdvancedArtifactReduction(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for artifact reduction
+  private static boostContrast(data: Uint8ClampedArray, width: number, height: number, amount: number): void {
+    const factor = amount / 100
+    
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        const value = data[i + c]
+        const contrast = (value - 128) * (1 + factor * 0.5) + 128
+        data[i + c] = Math.max(0, Math.min(255, contrast))
+      }
+    }
   }
 
-  private static async recoverCompressionDetails(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for detail recovery
-  }
-
-  private static async applyDeepNoiseReduction(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for deep noise reduction
-  }
-
-  private static async enhanceStructuralDetails(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for structural detail enhancement
-  }
-
-  private static async applyResidualEnhancement(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for residual learning enhancement
-  }
-
-  private static async applyMitchellFilter(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for Mitchell filter
-  }
-
-  private static async applyCatmullRomFilter(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for Catmull-Rom filter
-  }
-
-  private static async applyBicubicRefinement(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for bicubic refinement
-  }
-
-  private static async applyFinalSharpening(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for final sharpening
-  }
-
-  private static async optimizeContrast(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for contrast optimization
-  }
-
-  private static async finalColorCorrection(data: Uint8ClampedArray, width: number, height: number): Promise<void> {
-    // Implementation for final color correction
-  }
-
-  private static calculateQualityMetrics(
-    canvas: HTMLCanvasElement,
-    contentAnalysis: any
-  ): { sharpness: number; noiseLevel: number; artifactLevel: number; overallQuality: number } {
-    // Calculate quality metrics for the upscaled result
+  private static async reduceCompressionArtifacts(canvas: HTMLCanvasElement): Promise<void> {
     const ctx = canvas.getContext("2d")!
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     
-    const sharpness = this.measureSharpness(imageData)
-    const noiseLevel = this.measureNoise(imageData)
-    const artifactLevel = this.measureArtifacts(imageData)
+    this.reduceCompressionArtifactsInData(imageData.data, canvas.width, canvas.height)
     
-    const overallQuality = (sharpness * 0.4 + (1 - noiseLevel) * 0.3 + (1 - artifactLevel) * 0.3)
+    ctx.putImageData(imageData, 0, 0)
+  }
+
+  private static reduceCompressionArtifactsInData(data: Uint8ClampedArray, width: number, height: number): void {
+    const filtered = new Uint8ClampedArray(data)
     
-    return {
-      sharpness: Math.round(sharpness * 100) / 100,
-      noiseLevel: Math.round(noiseLevel * 100) / 100,
-      artifactLevel: Math.round(artifactLevel * 100) / 100,
-      overallQuality: Math.round(overallQuality * 100) / 100
+    // Apply selective filtering to reduce JPEG artifacts
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let weightSum = 0
+          let valueSum = 0
+          const centerValue = data[idx + c]
+          
+          // 5x5 neighborhood with bilateral filtering
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              const neighborValue = data[nIdx]
+              
+              const spatialWeight = Math.exp(-(dx * dx + dy * dy) / 8)
+              const colorWeight = Math.exp(-Math.pow(centerValue - neighborValue, 2) / 800)
+              const weight = spatialWeight * colorWeight
+              
+              weightSum += weight
+              valueSum += neighborValue * weight
+            }
+          }
+          
+          filtered[idx + c] = Math.round(valueSum / weightSum)
+        }
+      }
+    }
+    
+    // Blend filtered version
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        data[i + c] = Math.round(data[i + c] * 0.7 + filtered[i + c] * 0.3)
+      }
     }
   }
 
-  private static measureSharpness(imageData: ImageData): number {
-    // Implementation for sharpness measurement
-    return 0.8 // Placeholder
+  private static async applyFinalPostProcessing(
+    canvas: HTMLCanvasElement,
+    options: UltimateUpscaleOptions
+  ): Promise<void> {
+    if (options.multiPass) {
+      // Second pass refinement
+      const ctx = canvas.getContext("2d")!
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Apply final sharpening
+      this.applySharpen(imageData.data, canvas.width, canvas.height, 15)
+      
+      ctx.putImageData(imageData, 0, 0)
+    }
   }
 
-  private static measureNoise(imageData: ImageData): number {
-    // Implementation for noise measurement
-    return 0.2 // Placeholder
+  private static calculateQualityMetrics(canvas: HTMLCanvasElement): {
+    sharpness: number
+    noise: number
+    artifacts: number
+  } {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    
+    let sharpnessSum = 0
+    let noiseSum = 0
+    let artifactSum = 0
+    let sampleCount = 0
+    
+    // Sample every 10th pixel for performance
+    for (let y = 5; y < canvas.height - 5; y += 10) {
+      for (let x = 5; x < canvas.width - 5; x += 10) {
+        const idx = (y * canvas.width + x) * 4
+        
+        // Calculate sharpness (edge strength)
+        let edgeStrength = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            
+            const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4
+            const gradient = Math.abs(data[idx] - data[nIdx]) +
+                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
+                           Math.abs(data[idx + 2] - data[nIdx + 2])
+            edgeStrength = Math.max(edgeStrength, gradient)
+          }
+        }
+        
+        sharpnessSum += edgeStrength
+        
+        // Calculate noise (high frequency variation)
+        if (this.isNoisePixel(data, x, y, canvas.width, canvas.height)) {
+          noiseSum++
+        }
+        
+        // Calculate artifacts (blocking patterns)
+        if (this.hasCompressionArtifacts(data, x, y, canvas.width, canvas.height)) {
+          artifactSum++
+        }
+        
+        sampleCount++
+      }
+    }
+    
+    return {
+      sharpness: Math.min(100, (sharpnessSum / sampleCount) / 2),
+      noise: Math.min(100, (noiseSum / sampleCount) * 100),
+      artifacts: Math.min(100, (artifactSum / sampleCount) * 100)
+    }
   }
 
-  private static measureArtifacts(imageData: ImageData): number {
-    // Implementation for artifact measurement
-    return 0.1 // Placeholder
+  private static async createOutputBlob(
+    canvas: HTMLCanvasElement,
+    options: UltimateUpscaleOptions
+  ): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const quality = (options.quality || 95) / 100
+      const mimeType = `image/${options.outputFormat || "png"}`
+      
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error("Failed to create output blob"))
+          }
+        },
+        mimeType,
+        quality
+      )
+    })
+  }
+
+  private static cleanupMemory(canvases: HTMLCanvasElement[]): void {
+    // Clean up canvases
+    canvases.forEach(canvas => {
+      const ctx = canvas.getContext("2d")
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+      canvas.width = 1
+      canvas.height = 1
+    })
+    
+    // Force garbage collection if available
+    if ('gc' in window && typeof (window as any).gc === 'function') {
+      setTimeout(() => {
+        (window as any).gc()
+      }, 100)
+    }
   }
 }

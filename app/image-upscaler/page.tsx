@@ -13,76 +13,9 @@ const upscaleOptions = [
     selectOptions: [
       { value: "1.5x", label: "1.5x (150%)" },
       { value: "2x", label: "2x (200%)" },
-      { value: "3x", label: "3x (300%)" },
-      { value: "4x", label: "4x (400%)" },
+      { value: "2.5x", label: "2.5x (250%)" },
     ],
-    section: "Scaling",
-  },
-  {
-    key: "algorithm",
-    label: "Upscaling Algorithm",
-    type: "select" as const,
-    defaultValue: "esrgan-like",
-    selectOptions: [
-      { value: "lanczos", label: "Lanczos (Fast)" },
-      { value: "bicubic", label: "Bicubic (Balanced)" },
-      { value: "esrgan-like", label: "ESRGAN-like (Best Quality)" },
-      { value: "super-resolution", label: "Super Resolution (Experimental)" },
-    ],
-    section: "Quality",
-  },
-  {
-    key: "enhanceDetails",
-    label: "Enhance Details",
-    type: "checkbox" as const,
-    defaultValue: true,
-    section: "Enhancement",
-  },
-  {
-    key: "reduceNoise",
-    label: "Reduce Noise",
-    type: "checkbox" as const,
-    defaultValue: true,
-    section: "Enhancement",
-  },
-  {
-    key: "sharpen",
-    label: "Sharpening",
-    type: "slider" as const,
-    defaultValue: 40,
-    min: 0,
-    max: 100,
-    step: 5,
-    section: "Enhancement",
-  },
-  {
-    key: "autoOptimize",
-    label: "Auto Optimize",
-    type: "checkbox" as const,
-    defaultValue: true,
-    section: "Enhancement",
-  },
-  {
-    key: "quality",
-    label: "Output Quality",
-    type: "slider" as const,
-    defaultValue: 95,
-    min: 85,
-    max: 100,
-    step: 1,
-    section: "Output",
-  },
-  {
-    key: "tileSize",
-    label: "Processing Tile Size",
-    type: "select" as const,
-    defaultValue: "512",
-    selectOptions: [
-      { value: "256", label: "256px (Memory Safe)" },
-      { value: "512", label: "512px (Balanced)" },
-      { value: "1024", label: "1024px (High Quality)" },
-    ],
-    section: "Performance",
+    section: "Settings",
   },
 ]
 
@@ -103,13 +36,12 @@ async function upscaleImages(files: any[], options: any) {
         
         const upscaleOptions = {
           scaleFactor,
-          algorithm: options.algorithm || "bicubic",
-          enhanceDetails: Boolean(options.enhanceDetails),
-          reduceNoise: Boolean(options.reduceNoise),
-          sharpen: options.sharpen || 0,
-          autoOptimize: Boolean(options.autoOptimize),
-          tileSize: parseInt(options.tileSize || "512"),
-          maxDimensions: { width: 4096, height: 4096 },
+          algorithm: "auto", // Always use auto for best results
+          enhanceDetails: true,
+          reduceNoise: true,
+          sharpen: 25,
+          autoOptimize: true,
+          maxDimensions: { width: 2048, height: 2048 }, // Safer limits
           memoryOptimized: true,
         }
 
@@ -157,12 +89,12 @@ export default function ImageUpscalerPage() {
   return (
     <ImageToolsLayout
       title="Image Upscaler"
-      description="Enlarge images with AI-enhanced quality using advanced algorithms. Increase resolution while preserving details and reducing artifacts."
+      description="Automatically enlarge images with AI-enhanced quality. Smart algorithm selection and automatic optimization for best results without complexity."
       icon={ZoomIn}
       toolType="upscale"
       processFunction={upscaleImages}
       options={upscaleOptions}
-      maxFiles={5}
+      maxFiles={3}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "jpeg", "webp"]}

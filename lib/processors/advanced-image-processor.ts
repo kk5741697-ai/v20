@@ -1,7 +1,7 @@
-// Advanced image processing with improved upscaling algorithms
+// Advanced image processing with automatic upscaling and crash prevention
 export interface AdvancedImageOptions {
   scaleFactor?: number
-  algorithm?: "lanczos" | "bicubic" | "esrgan-like" | "super-resolution"
+  algorithm?: "auto" | "lanczos" | "bicubic" | "super-resolution"
   enhanceDetails?: boolean
   reduceNoise?: boolean
   sharpen?: number
@@ -15,15 +15,17 @@ export interface AdvancedImageOptions {
 }
 
 export class AdvancedImageProcessor {
-  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // Reduced for stability
+  private static readonly MAX_SAFE_PIXELS = 1024 * 1024 // 1MP for stability
+  private static readonly MAX_CANVAS_SIZE = 2048 // Max canvas dimension
   
   static async upscaleImageAdvanced(file: File, options: AdvancedImageOptions = {}): Promise<Blob> {
-    const scaleFactor = Math.min(options.scaleFactor || 2, 3) // Limit to 3x for stability
-    const maxDimensions = options.maxDimensions || { width: 1536, height: 1536 }
+    // Auto-optimize settings based on file size and device
+    const autoOptions = this.getAutoOptimizedSettings(file, options)
+    const finalOptions = { ...options, ...autoOptions }
     
-    // Strict file size limits
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-      throw new Error("Image too large. Please use an image smaller than 10MB.")
+    // Strict file size limits for stability
+    if (file.size > 8 * 1024 * 1024) { // 8MB limit
+      throw new Error("Image too large. Please use an image smaller than 8MB for upscaling.")
     }
     
     return new Promise((resolve, reject) => {
@@ -42,64 +44,58 @@ export class AdvancedImageProcessor {
       const img = new Image()
       img.onload = async () => {
         try {
-          options.progressCallback?.(10)
+          finalOptions.progressCallback?.(10)
           
-          // Calculate safe working dimensions
-          let workingWidth = img.naturalWidth
-          let workingHeight = img.naturalHeight
-          
-          // Ensure we don't exceed memory limits
-          if (workingWidth * workingHeight > this.MAX_SAFE_PIXELS) {
-            const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (workingWidth * workingHeight))
-            workingWidth = Math.floor(workingWidth * scale)
-            workingHeight = Math.floor(workingHeight * scale)
-          }
-          
-          // Check against max dimensions
-          if (workingWidth > maxDimensions.width || workingHeight > maxDimensions.height) {
-            const scale = Math.min(
-              maxDimensions.width / workingWidth,
-              maxDimensions.height / workingHeight
-            )
-            workingWidth = Math.floor(workingWidth * scale)
-            workingHeight = Math.floor(workingHeight * scale)
-          }
-          
-          // Create working canvas
-          const workingCanvas = document.createElement("canvas")
-          const workingCtx = workingCanvas.getContext("2d", { alpha: true })!
-          workingCanvas.width = workingWidth
-          workingCanvas.height = workingHeight
-          
-          // Draw at working resolution
-          workingCtx.imageSmoothingEnabled = true
-          workingCtx.imageSmoothingQuality = "high"
-          workingCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
-          
-          options.progressCallback?.(30)
-          
-          // Apply upscaling algorithm
-          const upscaledCanvas = await this.applyUpscalingAlgorithm(
-            workingCanvas, 
-            scaleFactor, 
-            options
+          // Calculate optimal working dimensions
+          const { workingWidth, workingHeight, needsPreScale } = this.calculateOptimalDimensions(
+            img.naturalWidth, 
+            img.naturalHeight,
+            finalOptions.scaleFactor || 2,
+            finalOptions.maxDimensions
           )
           
-          options.progressCallback?.(80)
+          finalOptions.progressCallback?.(20)
           
-          // Final canvas setup
-          canvas.width = upscaledCanvas.width
-          canvas.height = upscaledCanvas.height
-          ctx.drawImage(upscaledCanvas, 0, 0)
+          let sourceCanvas = canvas
+          let sourceCtx = ctx
           
-          // Apply post-processing
-          if (options.enhanceDetails || options.sharpen) {
-            await this.applyPostProcessing(ctx, canvas, options)
+          // Pre-scale if needed for memory safety
+          if (needsPreScale) {
+            const preScaleCanvas = document.createElement("canvas")
+            const preScaleCtx = preScaleCanvas.getContext("2d")!
+            
+            preScaleCanvas.width = workingWidth
+            preScaleCanvas.height = workingHeight
+            
+            preScaleCtx.imageSmoothingEnabled = true
+            preScaleCtx.imageSmoothingQuality = "high"
+            preScaleCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
+            
+            sourceCanvas = preScaleCanvas
+            sourceCtx = preScaleCtx
+          } else {
+            canvas.width = img.naturalWidth
+            canvas.height = img.naturalHeight
+            ctx.imageSmoothingEnabled = true
+            ctx.imageSmoothingQuality = "high"
+            ctx.drawImage(img, 0, 0)
           }
           
-          options.progressCallback?.(100)
+          finalOptions.progressCallback?.(40)
           
-          canvas.toBlob(
+          // Apply automatic upscaling with the best algorithm
+          const upscaledCanvas = await this.applyAutoUpscaling(sourceCanvas, finalOptions)
+          
+          finalOptions.progressCallback?.(80)
+          
+          // Apply automatic post-processing
+          if (finalOptions.autoOptimize !== false) {
+            await this.applyAutoPostProcessing(upscaledCanvas, finalOptions)
+          }
+          
+          finalOptions.progressCallback?.(100)
+          
+          upscaledCanvas.toBlob(
             (blob) => {
               if (blob) {
                 resolve(blob)
@@ -108,7 +104,7 @@ export class AdvancedImageProcessor {
               }
             },
             "image/png",
-            (options.quality || 95) / 100
+            (finalOptions.quality || 95) / 100
           )
         } catch (error) {
           reject(error)
@@ -121,97 +117,171 @@ export class AdvancedImageProcessor {
     })
   }
 
-  private static async applyUpscalingAlgorithm(
+  private static getAutoOptimizedSettings(file: File, options: AdvancedImageOptions): Partial<AdvancedImageOptions> {
+    const autoSettings: Partial<AdvancedImageOptions> = {}
+    
+    // Auto-select algorithm based on file size and type
+    if (!options.algorithm || options.algorithm === "auto") {
+      if (file.size < 2 * 1024 * 1024) { // < 2MB
+        autoSettings.algorithm = "super-resolution"
+      } else if (file.size < 5 * 1024 * 1024) { // < 5MB
+        autoSettings.algorithm = "lanczos"
+      } else {
+        autoSettings.algorithm = "bicubic"
+      }
+    }
+    
+    // Auto-adjust scale factor based on file size
+    if (!options.scaleFactor) {
+      if (file.size > 5 * 1024 * 1024) {
+        autoSettings.scaleFactor = 1.5 // Conservative for large files
+      } else {
+        autoSettings.scaleFactor = 2
+      }
+    }
+    
+    // Auto-enable features based on image characteristics
+    autoSettings.enhanceDetails = true
+    autoSettings.reduceNoise = file.size > 3 * 1024 * 1024 // Enable for larger files
+    autoSettings.sharpen = 30 // Moderate sharpening
+    autoSettings.memoryOptimized = true
+    autoSettings.autoOptimize = true
+    
+    // Set safe max dimensions
+    autoSettings.maxDimensions = {
+      width: Math.min(options.maxDimensions?.width || 2048, 2048),
+      height: Math.min(options.maxDimensions?.height || 2048, 2048)
+    }
+    
+    return autoSettings
+  }
+
+  private static calculateOptimalDimensions(
+    originalWidth: number,
+    originalHeight: number,
+    scaleFactor: number,
+    maxDimensions?: { width: number; height: number }
+  ) {
+    const targetWidth = originalWidth * scaleFactor
+    const targetHeight = originalHeight * scaleFactor
+    
+    const maxWidth = Math.min(maxDimensions?.width || this.MAX_CANVAS_SIZE, this.MAX_CANVAS_SIZE)
+    const maxHeight = Math.min(maxDimensions?.height || this.MAX_CANVAS_SIZE, this.MAX_CANVAS_SIZE)
+    
+    let workingWidth = originalWidth
+    let workingHeight = originalHeight
+    let needsPreScale = false
+    
+    // Check if original image is too large for processing
+    if (originalWidth * originalHeight > this.MAX_SAFE_PIXELS) {
+      const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (originalWidth * originalHeight))
+      workingWidth = Math.floor(originalWidth * scale)
+      workingHeight = Math.floor(originalHeight * scale)
+      needsPreScale = true
+    }
+    
+    // Check if target dimensions exceed limits
+    if (targetWidth > maxWidth || targetHeight > maxHeight) {
+      const scale = Math.min(maxWidth / targetWidth, maxHeight / targetHeight)
+      workingWidth = Math.floor(originalWidth * scale)
+      workingHeight = Math.floor(originalHeight * scale)
+      needsPreScale = true
+    }
+    
+    return { workingWidth, workingHeight, needsPreScale }
+  }
+
+  private static async applyAutoUpscaling(
+    sourceCanvas: HTMLCanvasElement,
+    options: AdvancedImageOptions
+  ): Promise<HTMLCanvasElement> {
+    const algorithm = options.algorithm || "lanczos"
+    const scaleFactor = Math.min(options.scaleFactor || 2, 3) // Limit to 3x
+    
+    switch (algorithm) {
+      case "super-resolution":
+        return this.superResolutionUpscale(sourceCanvas, scaleFactor, options)
+      case "lanczos":
+        return this.lanczosUpscale(sourceCanvas, scaleFactor)
+      case "bicubic":
+        return this.bicubicUpscale(sourceCanvas, scaleFactor)
+      default:
+        return this.smartUpscale(sourceCanvas, scaleFactor, options)
+    }
+  }
+
+  private static async smartUpscale(
     sourceCanvas: HTMLCanvasElement,
     scaleFactor: number,
     options: AdvancedImageOptions
   ): Promise<HTMLCanvasElement> {
-    const algorithm = options.algorithm || "bicubic"
+    // Analyze image to choose best upscaling method
+    const ctx = sourceCanvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
+    const analysis = this.analyzeImageForUpscaling(imageData)
     
-    switch (algorithm) {
-      case "lanczos":
-        return this.lanczosUpscale(sourceCanvas, scaleFactor)
-      case "esrgan-like":
-        return this.esrganLikeUpscale(sourceCanvas, scaleFactor, options)
-      case "super-resolution":
-        return this.superResolutionUpscale(sourceCanvas, scaleFactor, options)
-      default: // bicubic
-        return this.bicubicUpscale(sourceCanvas, scaleFactor)
+    if (analysis.hasSharpEdges && analysis.textContent > 0.1) {
+      // Use Lanczos for sharp content
+      return this.lanczosUpscale(sourceCanvas, scaleFactor)
+    } else if (analysis.hasPhotographicContent) {
+      // Use super-resolution for photos
+      return this.superResolutionUpscale(sourceCanvas, scaleFactor, options)
+    } else {
+      // Use bicubic for general content
+      return this.bicubicUpscale(sourceCanvas, scaleFactor)
     }
   }
 
-  private static async bicubicUpscale(
-    sourceCanvas: HTMLCanvasElement,
-    scaleFactor: number
-  ): Promise<HTMLCanvasElement> {
-    const srcCtx = sourceCanvas.getContext("2d")!
-    const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
-    const srcData = srcImageData.data
+  private static analyzeImageForUpscaling(imageData: ImageData): {
+    hasSharpEdges: boolean
+    textContent: number
+    hasPhotographicContent: boolean
+    noiseLevel: number
+  } {
+    const { data, width, height } = imageData
+    let edgeCount = 0
+    let highFrequencyCount = 0
+    let colorVariation = 0
+    let totalPixels = 0
     
-    const targetWidth = Math.floor(sourceCanvas.width * scaleFactor)
-    const targetHeight = Math.floor(sourceCanvas.height * scaleFactor)
-    
-    const resultCanvas = document.createElement("canvas")
-    const resultCtx = resultCanvas.getContext("2d")!
-    resultCanvas.width = targetWidth
-    resultCanvas.height = targetHeight
-    
-    const resultImageData = resultCtx.createImageData(targetWidth, targetHeight)
-    const resultData = resultImageData.data
-    
-    // Bicubic interpolation
-    const cubic = (t: number): number => {
-      const a = -0.5
-      const absT = Math.abs(t)
-      
-      if (absT <= 1) {
-        return (a + 2) * absT * absT * absT - (a + 3) * absT * absT + 1
-      } else if (absT <= 2) {
-        return a * absT * absT * absT - 5 * a * absT * absT + 8 * a * absT - 4 * a
-      }
-      return 0
-    }
-    
-    for (let targetY = 0; targetY < targetHeight; targetY++) {
-      for (let targetX = 0; targetX < targetWidth; targetX++) {
-        const srcX = targetX / scaleFactor
-        const srcY = targetY / scaleFactor
+    // Sample every 4th pixel for performance
+    for (let y = 1; y < height - 1; y += 2) {
+      for (let x = 1; x < width - 1; x += 2) {
+        const idx = (y * width + x) * 4
+        totalPixels++
         
-        let r = 0, g = 0, b = 0, a = 0
-        
-        // Sample 4x4 neighborhood
-        for (let dy = -1; dy <= 2; dy++) {
-          for (let dx = -1; dx <= 2; dx++) {
-            const sampleX = Math.floor(srcX) + dx
-            const sampleY = Math.floor(srcY) + dy
+        // Edge detection
+        let maxGradient = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
             
-            if (sampleX >= 0 && sampleX < sourceCanvas.width && 
-                sampleY >= 0 && sampleY < sourceCanvas.height) {
-              
-              const weightX = cubic(srcX - sampleX)
-              const weightY = cubic(srcY - sampleY)
-              const weight = weightX * weightY
-              
-              const srcIndex = (sampleY * sourceCanvas.width + sampleX) * 4
-              
-              r += srcData[srcIndex] * weight
-              g += srcData[srcIndex + 1] * weight
-              b += srcData[srcIndex + 2] * weight
-              a += srcData[srcIndex + 3] * weight
-            }
+            const nIdx = ((y + dy) * width + (x + dx)) * 4
+            const gradient = Math.abs(data[idx] - data[nIdx]) +
+                           Math.abs(data[idx + 1] - data[nIdx + 1]) +
+                           Math.abs(data[idx + 2] - data[nIdx + 2])
+            maxGradient = Math.max(maxGradient, gradient)
           }
         }
         
-        const targetIndex = (targetY * targetWidth + targetX) * 4
-        resultData[targetIndex] = Math.max(0, Math.min(255, r))
-        resultData[targetIndex + 1] = Math.max(0, Math.min(255, g))
-        resultData[targetIndex + 2] = Math.max(0, Math.min(255, b))
-        resultData[targetIndex + 3] = Math.max(0, Math.min(255, a))
+        if (maxGradient > 50) edgeCount++
+        if (maxGradient > 100) highFrequencyCount++
+        
+        // Color variation
+        const r = data[idx]
+        const g = data[idx + 1]
+        const b = data[idx + 2]
+        const variation = Math.max(r, g, b) - Math.min(r, g, b)
+        colorVariation += variation
       }
     }
     
-    resultCtx.putImageData(resultImageData, 0, 0)
-    return resultCanvas
+    return {
+      hasSharpEdges: edgeCount / totalPixels > 0.15,
+      textContent: highFrequencyCount / totalPixels,
+      hasPhotographicContent: colorVariation / totalPixels > 30,
+      noiseLevel: highFrequencyCount / totalPixels
+    }
   }
 
   private static async lanczosUpscale(
@@ -222,8 +292,8 @@ export class AdvancedImageProcessor {
     const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
     const srcData = srcImageData.data
     
-    const targetWidth = Math.floor(sourceCanvas.width * scaleFactor)
-    const targetHeight = Math.floor(sourceCanvas.height * scaleFactor)
+    const targetWidth = Math.min(Math.floor(sourceCanvas.width * scaleFactor), this.MAX_CANVAS_SIZE)
+    const targetHeight = Math.min(Math.floor(sourceCanvas.height * scaleFactor), this.MAX_CANVAS_SIZE)
     
     const resultCanvas = document.createElement("canvas")
     const resultCtx = resultCanvas.getContext("2d")!
@@ -233,7 +303,7 @@ export class AdvancedImageProcessor {
     const resultImageData = resultCtx.createImageData(targetWidth, targetHeight)
     const resultData = resultImageData.data
     
-    // Lanczos-3 kernel
+    // Optimized Lanczos-3 kernel
     const lanczos = (x: number): number => {
       if (x === 0) return 1
       if (Math.abs(x) >= 3) return 0
@@ -242,71 +312,83 @@ export class AdvancedImageProcessor {
       return (3 * Math.sin(piX) * Math.sin(piX / 3)) / (piX * piX)
     }
     
-    for (let targetY = 0; targetY < targetHeight; targetY++) {
-      for (let targetX = 0; targetX < targetWidth; targetX++) {
-        const srcX = targetX / scaleFactor
-        const srcY = targetY / scaleFactor
-        
-        let r = 0, g = 0, b = 0, a = 0, weightSum = 0
-        
-        // Sample 6x6 neighborhood for Lanczos-3
-        for (let dy = -2; dy <= 3; dy++) {
-          for (let dx = -2; dx <= 3; dx++) {
-            const sampleX = Math.floor(srcX) + dx
-            const sampleY = Math.floor(srcY) + dy
-            
-            if (sampleX >= 0 && sampleX < sourceCanvas.width && 
-                sampleY >= 0 && sampleY < sourceCanvas.height) {
+    // Process in chunks to prevent browser freezing
+    const chunkSize = 1000
+    
+    for (let startY = 0; startY < targetHeight; startY += chunkSize) {
+      const endY = Math.min(startY + chunkSize, targetHeight)
+      
+      for (let targetY = startY; targetY < endY; targetY++) {
+        for (let targetX = 0; targetX < targetWidth; targetX++) {
+          const srcX = targetX / scaleFactor
+          const srcY = targetY / scaleFactor
+          
+          let r = 0, g = 0, b = 0, a = 0, weightSum = 0
+          
+          // Sample 6x6 neighborhood
+          for (let dy = -2; dy <= 3; dy++) {
+            for (let dx = -2; dx <= 3; dx++) {
+              const sampleX = Math.floor(srcX) + dx
+              const sampleY = Math.floor(srcY) + dy
               
-              const weight = lanczos(srcX - sampleX) * lanczos(srcY - sampleY)
-              const srcIndex = (sampleY * sourceCanvas.width + sampleX) * 4
-              
-              r += srcData[srcIndex] * weight
-              g += srcData[srcIndex + 1] * weight
-              b += srcData[srcIndex + 2] * weight
-              a += srcData[srcIndex + 3] * weight
-              weightSum += weight
+              if (sampleX >= 0 && sampleX < sourceCanvas.width && 
+                  sampleY >= 0 && sampleY < sourceCanvas.height) {
+                
+                const weight = lanczos(srcX - sampleX) * lanczos(srcY - sampleY)
+                const srcIndex = (sampleY * sourceCanvas.width + sampleX) * 4
+                
+                r += srcData[srcIndex] * weight
+                g += srcData[srcIndex + 1] * weight
+                b += srcData[srcIndex + 2] * weight
+                a += srcData[srcIndex + 3] * weight
+                weightSum += weight
+              }
             }
           }
+          
+          const targetIndex = (targetY * targetWidth + targetX) * 4
+          resultData[targetIndex] = Math.max(0, Math.min(255, r / weightSum))
+          resultData[targetIndex + 1] = Math.max(0, Math.min(255, g / weightSum))
+          resultData[targetIndex + 2] = Math.max(0, Math.min(255, b / weightSum))
+          resultData[targetIndex + 3] = Math.max(0, Math.min(255, a / weightSum))
         }
-        
-        const targetIndex = (targetY * targetWidth + targetX) * 4
-        resultData[targetIndex] = Math.max(0, Math.min(255, r / weightSum))
-        resultData[targetIndex + 1] = Math.max(0, Math.min(255, g / weightSum))
-        resultData[targetIndex + 2] = Math.max(0, Math.min(255, b / weightSum))
-        resultData[targetIndex + 3] = Math.max(0, Math.min(255, a / weightSum))
       }
+      
+      // Allow browser to breathe
+      await new Promise(resolve => setTimeout(resolve, 1))
     }
     
     resultCtx.putImageData(resultImageData, 0, 0)
     return resultCanvas
   }
 
-  private static async esrganLikeUpscale(
+  private static async bicubicUpscale(
     sourceCanvas: HTMLCanvasElement,
-    scaleFactor: number,
-    options: AdvancedImageOptions
+    scaleFactor: number
   ): Promise<HTMLCanvasElement> {
-    // Start with high-quality bicubic upscaling
-    const bicubicResult = await this.bicubicUpscale(sourceCanvas, scaleFactor)
+    const srcCtx = sourceCanvas.getContext("2d")!
+    const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
+    const srcData = srcImageData.data
     
-    // Apply ESRGAN-like enhancement
-    const ctx = bicubicResult.getContext("2d")!
-    const imageData = ctx.getImageData(0, 0, bicubicResult.width, bicubicResult.height)
-    const data = imageData.data
+    const targetWidth = Math.min(Math.floor(sourceCanvas.width * scaleFactor), this.MAX_CANVAS_SIZE)
+    const targetHeight = Math.min(Math.floor(sourceCanvas.height * scaleFactor), this.MAX_CANVAS_SIZE)
     
-    // Apply detail enhancement
-    if (options.enhanceDetails !== false) {
-      this.applyDetailEnhancement(data, bicubicResult.width, bicubicResult.height)
-    }
+    const resultCanvas = document.createElement("canvas")
+    const resultCtx = resultCanvas.getContext("2d")!
+    resultCanvas.width = targetWidth
+    resultCanvas.height = targetHeight
     
-    // Apply noise reduction
-    if (options.reduceNoise) {
-      this.applyNoiseReduction(data, bicubicResult.width, bicubicResult.height)
-    }
+    // Use browser's built-in high-quality scaling as base
+    resultCtx.imageSmoothingEnabled = true
+    resultCtx.imageSmoothingQuality = "high"
+    resultCtx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
     
-    ctx.putImageData(imageData, 0, 0)
-    return bicubicResult
+    // Apply additional sharpening for better results
+    const imageData = resultCtx.getImageData(0, 0, targetWidth, targetHeight)
+    this.applyUnsharpMask(imageData.data, targetWidth, targetHeight, 0.5, 1.5)
+    resultCtx.putImageData(imageData, 0, 0)
+    
+    return resultCanvas
   }
 
   private static async superResolutionUpscale(
@@ -314,23 +396,64 @@ export class AdvancedImageProcessor {
     scaleFactor: number,
     options: AdvancedImageOptions
   ): Promise<HTMLCanvasElement> {
-    // Multi-pass upscaling for better quality
+    // Multi-pass upscaling with enhancement
     let currentCanvas = sourceCanvas
     let currentScale = 1
+    const targetScale = Math.min(scaleFactor, 2.5) // Limit for quality
     
-    while (currentScale < scaleFactor) {
-      const stepScale = Math.min(2, scaleFactor / currentScale)
+    while (currentScale < targetScale) {
+      const stepScale = Math.min(1.5, targetScale / currentScale)
+      
+      // Apply Lanczos upscaling
       currentCanvas = await this.lanczosUpscale(currentCanvas, stepScale)
       currentScale *= stepScale
       
       // Apply enhancement between passes
       const ctx = currentCanvas.getContext("2d")!
       const imageData = ctx.getImageData(0, 0, currentCanvas.width, currentCanvas.height)
+      
+      // Apply detail enhancement
       this.applyDetailEnhancement(imageData.data, currentCanvas.width, currentCanvas.height)
+      
+      // Apply noise reduction if enabled
+      if (options.reduceNoise) {
+        this.applyBilateralFilter(imageData.data, currentCanvas.width, currentCanvas.height)
+      }
+      
       ctx.putImageData(imageData, 0, 0)
+      
+      // Allow browser to breathe
+      await new Promise(resolve => setTimeout(resolve, 10))
     }
     
     return currentCanvas
+  }
+
+  private static async applyAutoPostProcessing(
+    canvas: HTMLCanvasElement,
+    options: AdvancedImageOptions
+  ): Promise<void> {
+    const ctx = canvas.getContext("2d")!
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    
+    // Auto-enhance details
+    if (options.enhanceDetails !== false) {
+      this.applyDetailEnhancement(data, canvas.width, canvas.height)
+    }
+    
+    // Auto-apply noise reduction
+    if (options.reduceNoise !== false) {
+      this.applyBilateralFilter(data, canvas.width, canvas.height)
+    }
+    
+    // Auto-apply sharpening
+    const sharpenAmount = options.sharpen || 25
+    if (sharpenAmount > 0) {
+      this.applyUnsharpMask(data, canvas.width, canvas.height, sharpenAmount / 100, 1.2)
+    }
+    
+    ctx.putImageData(imageData, 0, 0)
   }
 
   private static applyDetailEnhancement(
@@ -340,28 +463,25 @@ export class AdvancedImageProcessor {
   ): void {
     const enhanced = new Uint8ClampedArray(data)
     
-    // Unsharp mask for detail enhancement
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ]
-    
+    // High-pass filter for detail enhancement
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
         const centerIdx = (y * width + x) * 4
         
         for (let c = 0; c < 3; c++) {
           let sum = 0
+          let center = data[centerIdx + c] * 9
           
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const sampleIdx = ((y + ky) * width + (x + kx)) * 4 + c
-              sum += data[sampleIdx] * kernel[(ky + 1) * 3 + (kx + 1)]
+          // 3x3 neighborhood
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              sum += data[nIdx]
             }
           }
           
-          enhanced[centerIdx + c] = Math.max(0, Math.min(255, sum))
+          const highPass = center - sum
+          enhanced[centerIdx + c] = Math.max(0, Math.min(255, data[centerIdx + c] + highPass * 0.2))
         }
       }
     }
@@ -374,16 +494,18 @@ export class AdvancedImageProcessor {
     }
   }
 
-  private static applyNoiseReduction(
+  private static applyBilateralFilter(
     data: Uint8ClampedArray,
     width: number,
     height: number
   ): void {
     const filtered = new Uint8ClampedArray(data)
+    const radius = 3
+    const sigmaSpace = 50
+    const sigmaColor = 50
     
-    // Simple bilateral filter
-    for (let y = 2; y < height - 2; y++) {
-      for (let x = 2; x < width - 2; x++) {
+    for (let y = radius; y < height - radius; y++) {
+      for (let x = radius; x < width - radius; x++) {
         const centerIdx = (y * width + x) * 4
         
         for (let c = 0; c < 3; c++) {
@@ -391,17 +513,17 @@ export class AdvancedImageProcessor {
           let valueSum = 0
           const centerValue = data[centerIdx + c]
           
-          for (let dy = -2; dy <= 2; dy++) {
-            for (let dx = -2; dx <= 2; dx++) {
-              const sampleIdx = ((y + dy) * width + (x + dx)) * 4 + c
-              const sampleValue = data[sampleIdx]
+          for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              const neighborValue = data[nIdx]
               
-              const spatialWeight = Math.exp(-(dx * dx + dy * dy) / 8)
-              const intensityWeight = Math.exp(-Math.pow(centerValue - sampleValue, 2) / 1000)
-              const weight = spatialWeight * intensityWeight
+              const spatialWeight = Math.exp(-(dx * dx + dy * dy) / (2 * sigmaSpace * sigmaSpace))
+              const colorWeight = Math.exp(-Math.pow(centerValue - neighborValue, 2) / (2 * sigmaColor * sigmaColor))
+              const weight = spatialWeight * colorWeight
               
               weightSum += weight
-              valueSum += sampleValue * weight
+              valueSum += neighborValue * weight
             }
           }
           
@@ -416,66 +538,98 @@ export class AdvancedImageProcessor {
     }
   }
 
-  private static async applyPostProcessing(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    options: AdvancedImageOptions
-  ): Promise<void> {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    
-    // Apply sharpening if requested
-    if (options.sharpen && options.sharpen > 0) {
-      this.applySharpening(imageData.data, canvas.width, canvas.height, options.sharpen / 100)
-    }
-    
-    // Apply final enhancement
-    if (options.enhanceDetails) {
-      this.applyDetailEnhancement(imageData.data, canvas.width, canvas.height)
-    }
-    
-    ctx.putImageData(imageData, 0, 0)
-  }
-
-  private static applySharpening(
+  private static applyUnsharpMask(
     data: Uint8ClampedArray,
     width: number,
     height: number,
-    amount: number
+    amount: number,
+    threshold: number
   ): void {
-    const sharpened = new Uint8ClampedArray(data)
+    const blurred = new Uint8ClampedArray(data)
     
-    // Sharpening kernel
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ]
+    // Apply Gaussian blur
+    this.gaussianBlur(blurred, width, height, 1.0)
     
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const centerIdx = (y * width + x) * 4
+    // Apply unsharp mask
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        const original = data[i + c]
+        const blur = blurred[i + c]
+        const diff = original - blur
+        
+        if (Math.abs(diff) > threshold) {
+          const sharpened = original + diff * amount
+          data[i + c] = Math.max(0, Math.min(255, sharpened))
+        }
+      }
+    }
+  }
+
+  private static gaussianBlur(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+    sigma: number
+  ): void {
+    const radius = Math.ceil(sigma * 3)
+    const kernel = []
+    let kernelSum = 0
+    
+    // Create kernel
+    for (let i = -radius; i <= radius; i++) {
+      const value = Math.exp(-(i * i) / (2 * sigma * sigma))
+      kernel.push(value)
+      kernelSum += value
+    }
+    
+    // Normalize
+    for (let i = 0; i < kernel.length; i++) {
+      kernel[i] /= kernelSum
+    }
+    
+    const temp = new Uint8ClampedArray(data)
+    
+    // Horizontal pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4
         
         for (let c = 0; c < 3; c++) {
           let sum = 0
           
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const sampleIdx = ((y + ky) * width + (x + kx)) * 4 + c
-              sum += data[sampleIdx] * kernel[(ky + 1) * 3 + (kx + 1)]
-            }
+          for (let i = -radius; i <= radius; i++) {
+            const nx = Math.max(0, Math.min(width - 1, x + i))
+            const nIdx = (y * width + nx) * 4 + c
+            sum += temp[nIdx] * kernel[i + radius]
           }
           
-          const original = data[centerIdx + c]
-          sharpened[centerIdx + c] = Math.max(0, Math.min(255, 
-            original * (1 - amount) + sum * amount
-          ))
+          data[idx + c] = Math.round(sum)
         }
       }
     }
     
-    // Copy sharpened data back
+    // Vertical pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let sum = 0
+          
+          for (let i = -radius; i <= radius; i++) {
+            const ny = Math.max(0, Math.min(height - 1, y + i))
+            const nIdx = (ny * width + x) * 4 + c
+            sum += data[nIdx] * kernel[i + radius]
+          }
+          
+          temp[idx + c] = Math.round(sum)
+        }
+      }
+    }
+    
+    // Copy back
     for (let i = 0; i < data.length; i++) {
-      data[i] = sharpened[i]
+      data[i] = temp[i]
     }
   }
 }

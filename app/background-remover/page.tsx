@@ -6,52 +6,6 @@ import { AdvancedBackgroundProcessor } from "@/lib/processors/advanced-backgroun
 
 const backgroundOptions = [
   {
-    key: "algorithm",
-    label: "Algorithm",
-    type: "select" as const,
-    defaultValue: "auto",
-    selectOptions: [
-      { value: "auto", label: "Auto (Recommended)" },
-      { value: "portrait", label: "Portrait Mode" },
-      { value: "object", label: "Object Detection" },
-      { value: "precise", label: "Precise Edge" },
-    ],
-    section: "Detection",
-  },
-  {
-    key: "sensitivity",
-    label: "Edge Sensitivity",
-    type: "slider" as const,
-    defaultValue: 25,
-    min: 10,
-    max: 50,
-    step: 5,
-    section: "Detection",
-  },
-  {
-    key: "featherEdges",
-    label: "Feather Edges",
-    type: "checkbox" as const,
-    defaultValue: true,
-    section: "Refinement",
-  },
-  {
-    key: "preserveDetails",
-    label: "Preserve Details",
-    type: "checkbox" as const,
-    defaultValue: true,
-    section: "Refinement",
-  },
-  {
-    key: "smoothing",
-    label: "Edge Smoothing",
-    type: "slider" as const,
-    defaultValue: 2,
-    min: 0,
-    max: 10,
-    step: 1,
-    section: "Refinement",
-  },
   {
     key: "outputFormat",
     label: "Output Format",
@@ -61,7 +15,7 @@ const backgroundOptions = [
       { value: "png", label: "PNG (Transparent)" },
       { value: "webp", label: "WebP (Smaller)" },
     ],
-    section: "Output",
+    section: "Settings",
   },
 ]
 
@@ -77,14 +31,14 @@ async function removeBackgrounds(files: any[], options: any) {
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         const backgroundOptions = {
-          algorithm: options.algorithm || "auto",
-          sensitivity: options.sensitivity || 25,
-          featherEdges: options.featherEdges !== false,
-          preserveDetails: options.preserveDetails !== false,
-          smoothing: options.smoothing || 2,
+          algorithm: "auto", // Always use auto for best results
+          sensitivity: 25, // Optimal default
+          featherEdges: true,
+          preserveDetails: true,
+          smoothing: 3,
           outputFormat: options.outputFormat || "png",
           memoryOptimized: true,
-          maxDimensions: { width: 2048, height: 2048 },
+          maxDimensions: { width: 1024, height: 1024 }, // Safer limits
         }
 
         const result = await AdvancedBackgroundProcessor.removeBackground(
@@ -124,12 +78,12 @@ export default function BackgroundRemoverPage() {
   return (
     <ImageToolsLayout
       title="Background Remover"
-      description="Remove image backgrounds automatically with AI-powered edge detection. Perfect for product photos and portraits."
+      description="Remove image backgrounds automatically with smart AI detection. Optimized for portraits, products, and objects with professional results."
       icon={Eraser}
       toolType="background-removal"
       processFunction={removeBackgrounds}
       options={backgroundOptions}
-      maxFiles={5}
+      maxFiles={3}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "webp"]}

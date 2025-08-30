@@ -40,6 +40,9 @@ export function AdBanner({
     let sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0')
     let pageViews = parseInt(sessionStorage.getItem('pageViews') || '0')
     let toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0')
+    let timeOnPage = parseInt(sessionStorage.getItem('timeOnPage') || '0')
+    let scrollDepth = parseInt(sessionStorage.getItem('scrollDepth') || '0')
+    let userInteractions = parseInt(sessionStorage.getItem('userInteractions') || '0')
     
     if (!sessionStartTime) {
       sessionStartTime = Date.now()
@@ -48,11 +51,16 @@ export function AdBanner({
     
     const currentTime = Date.now()
     const sessionDuration = currentTime - sessionStartTime
+    const engagementScore = (timeOnPage / 1000) + (scrollDepth / 10) + (userInteractions * 2) + (toolUsage * 5)
     
-    // Enhanced bounce protection - only show ads if user has engaged meaningfully
-    const shouldShow = sessionDuration > 15000 || // 15 seconds minimum
-                      pageViews > 3 || // Multiple page views
-                      toolUsage > 1 // Used multiple tools
+    // Enhanced engagement-based ad display
+    const shouldShow = sessionDuration > 10000 && ( // 10 seconds minimum
+                      engagementScore > 20 || // High engagement score
+                      pageViews > 2 || // Multiple page views
+                      toolUsage > 0 || // Used tools
+                      timeOnPage > 30000 || // 30+ seconds on page
+                      scrollDepth > 50 // Scrolled more than 50%
+                      )
     
     setShouldShowAd(shouldShow)
     

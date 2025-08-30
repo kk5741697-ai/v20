@@ -60,7 +60,7 @@ async function convertImagesToPDF(files: any[], options: any) {
     if (files.length === 0) {
       return {
         success: false,
-        error: "Please select at least one image file to convert",
+        error: "Please select at least one image file to convert to PDF",
       }
     }
 
@@ -77,7 +77,7 @@ async function convertImagesToPDF(files: any[], options: any) {
     return {
       success: true,
       downloadUrl,
-      filename: "images_to_pdf.pdf",
+      filename: files.length === 1 ? `${files[0].name.split('.')[0]}.pdf` : "images_to_pdf.pdf",
     }
   } catch (error) {
     return {
@@ -91,7 +91,7 @@ export default function ImageToPDFPage() {
   return (
     <PDFToolsLayout
       title="Image to PDF Converter"
-      description="Convert multiple images (JPG, PNG, WebP) into a single PDF document with custom page layouts, margins, and sizing options."
+      description="Convert images (JPG, PNG, WebP) into a PDF document with custom page layouts, margins, and sizing options."
       icon={FileImage}
       toolType="convert"
       processFunction={convertImagesToPDF}

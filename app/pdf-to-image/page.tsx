@@ -60,12 +60,14 @@ async function convertPDFToImage(files: any[], options: any) {
       imageQuality: 90,
     }
 
-    // Always create ZIP with all images
+    // Single file - direct download if only one page, otherwise ZIP
     const JSZip = (await import("jszip")).default
     const zip = new JSZip()
+    let totalImages = 0
 
     for (const file of files) {
       const images = await PDFProcessor.pdfToImages(file.file, conversionOptions)
+      totalImages += images.length
 
       images.forEach((imageBlob, pageIndex) => {
         const filename = `${file.name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
@@ -73,6 +75,18 @@ async function convertPDFToImage(files: any[], options: any) {
       })
     }
 
+    // If only one image, download directly
+    if (totalImages === 1 && files.length === 1) {
+      const images = await PDFProcessor.pdfToImages(files[0].file, conversionOptions)
+      const blob = images[0]
+      const downloadUrl = URL.createObjectURL(blob)
+      
+      return {
+        success: true,
+        downloadUrl,
+        filename: `${files[0].name.replace(".pdf", "")}_page_1.${options.outputFormat}`,
+      }
+    }
     const zipBlob = await zip.generateAsync({ type: "blob" })
     const downloadUrl = URL.createObjectURL(zipBlob)
 

@@ -205,13 +205,13 @@ export default function ImageUpscalerPage() {
   return (
     <ImageToolsLayout
       title="Image Upscaler"
-      description="AI-powered image upscaling with advanced algorithms. Enlarge images up to 2.5x while preserving quality and details. Optimized for stability and performance."
+      description="AI-powered image upscaling with advanced algorithms. Enlarge images up to 2x while preserving quality and details."
       icon={ZoomIn}
       toolType="upscale"
       processFunction={upscaleImages}
       options={upscaleOptions}
-      maxFiles={3}
-      allowBatchProcessing={true}
+      maxFiles={1}
+      allowBatchProcessing={false}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "jpeg", "webp"]}
     />

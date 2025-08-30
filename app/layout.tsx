@@ -91,17 +91,51 @@ export default function RootLayout({
               let sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0');
               let pageViews = parseInt(sessionStorage.getItem('pageViews') || '0');
               let toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0');
+              let timeOnPage = 0;
+              let scrollDepth = 0;
+              let userInteractions = 0;
               
               if (!sessionStartTime) {
                 sessionStartTime = Date.now();
                 sessionStorage.setItem('sessionStartTime', sessionStartTime.toString());
               }
               
+              // Track time on page
+              setInterval(() => {
+                timeOnPage += 1000;
+                sessionStorage.setItem('timeOnPage', timeOnPage.toString());
+              }, 1000);
+              
+              // Track scroll depth
+              let maxScroll = 0;
+              window.addEventListener('scroll', () => {
+                const scrollPercent = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+                maxScroll = Math.max(maxScroll, scrollPercent);
+                scrollDepth = maxScroll;
+                sessionStorage.setItem('scrollDepth', scrollDepth.toString());
+              });
+              
+              // Track user interactions
+              ['click', 'keydown', 'mousemove', 'touchstart'].forEach(event => {
+                document.addEventListener(event, () => {
+                  userInteractions++;
+                  sessionStorage.setItem('userInteractions', userInteractions.toString());
+                }, { once: true, passive: true });
+              });
+              
               // Track tool usage
               document.addEventListener('click', function(e) {
                 const target = e.target;
                 if (target && (target.closest('[data-tool-action]') || target.closest('button'))) {
                   toolUsage++;
+                  sessionStorage.setItem('toolUsage', toolUsage.toString());
+                }
+              });
+              
+              // Track file uploads as high-value interactions
+              document.addEventListener('change', function(e) {
+                if (e.target && e.target.type === 'file') {
+                  toolUsage += 2; // Higher weight for file uploads
                   sessionStorage.setItem('toolUsage', toolUsage.toString());
                 }
               });
@@ -148,7 +182,14 @@ export default function RootLayout({
               
               function initAdsense() {
                 const sessionDuration = Date.now() - sessionStartTime;
-                const shouldShowAds = sessionDuration > 15000 || pageViews > 2 || toolUsage > 0;
+                const engagementScore = (timeOnPage / 1000) + (scrollDepth / 10) + (userInteractions * 2) + (toolUsage * 5);
+                const shouldShowAds = sessionDuration > 10000 && (
+                  engagementScore > 20 || 
+                  pageViews > 2 || 
+                  toolUsage > 0 ||
+                  timeOnPage > 30000 ||
+                  scrollDepth > 50
+                );
                 
                 if (!shouldShowAds) {
                   return; // Don't initialize ads for bouncy users
@@ -168,6 +209,17 @@ export default function RootLayout({
                     }
                   });
                   
+                  // Track ad impressions for better optimization
+                  const adElements = document.querySelectorAll('.adsbygoogle');
+                  adElements.forEach(ad => {
+                    if (ad.getAttribute('data-adsbygoogle-status') === 'done') {
+                      // Ad successfully loaded
+                      sessionStorage.setItem('adImpressions', 
+                        (parseInt(sessionStorage.getItem('adImpressions') || '0') + 1).toString()
+                      );
+                    }
+                  });
+                  
                   // Disable auto ads to prevent policy violations
                 } catch (e) {
                   console.warn('AdSense initialization failed:', e);
@@ -181,7 +233,7 @@ export default function RootLayout({
                 
                 if (window.location.pathname !== currentPath) {
                   currentPath = window.location.pathname;
-                  setTimeout(initAdsense, 2000); // Longer delay for better user experience
+                  setTimeout(initAdsense, 3000); // Even longer delay for better engagement
                 }
               }
               
@@ -205,7 +257,7 @@ export default function RootLayout({
               if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', initAdsense);
               } else {
-                initAdsense();
+                setTimeout(initAdsense, 5000); // Initial delay for better engagement
               }
             })();
           `}

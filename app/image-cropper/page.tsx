@@ -550,42 +550,6 @@ export default function ImageCropperPage() {
                 </Select>
               </div>
 
-              <div>
-                <Label className="text-sm font-medium">Quality: {quality}%</Label>
-                <Slider
-                  value={[quality]}
-                  onValueChange={([value]) => setQuality(value)}
-                  min={10}
-                  max={100}
-                  step={5}
-                  className="mt-2"
-                />
-              </div>
-            </div>
-
-            {/* Mobile Ad */}
-          </div>
-        </ScrollArea>
-        
-        {/* Mobile Footer */}
-        <div className="p-4 border-t bg-white space-y-3">
-          <Button 
-            onClick={() => {
-              handleProcess()
-              setIsMobileSidebarOpen(false)
-            }}
-            disabled={isProcessing || files.length === 0}
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-3 text-base font-semibold"
-            size="lg"
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Cropping...
-              </>
-            ) : (
-              <>
-                <Crop className="h-4 w-4 mr-2" />
                 Crop Image
               </>
             )}
@@ -1105,19 +1069,23 @@ export default function ImageCropperPage() {
                       <SelectContent>
                         <SelectItem value="png">PNG</SelectItem>
                         <SelectItem value="jpeg">JPEG</SelectItem>
-                        <SelectItem value="webp">WebP</SelectItem>
-                      </SelectContent>
+                      value={cropArea.width.toFixed(1)}
+                      onChange={(e) => handleCropAreaChange({ width: parseFloat(e.target.value) || 1 })}
                     </Select>
                   </div>
+                      step={0.1}
 
                   <div>
                     <Label className="text-sm font-medium">Quality: {quality}%</Label>
                     <Slider
-                      value={[quality]}
-                      onValueChange={([value]) => setQuality(value)}
-                      min={10}
-                      max={100}
+                      value={cropArea.x.toFixed(1)}
+                      onChange={(e) => handleCropAreaChange({ x: parseFloat(e.target.value) || 0 })}
+                      value={cropArea.y.toFixed(1)}
+                      value={cropArea.height.toFixed(1)}
+                      onChange={(e) => handleCropAreaChange({ height: parseFloat(e.target.value) || 1 })}
                       step={5}
+                      step={0.1}
+                      step={0.1}
                       className="mt-2"
                     />
                   </div>

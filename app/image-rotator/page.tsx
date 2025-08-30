@@ -13,6 +13,7 @@ const rotateOptions = [
     min: -180,
     max: 180,
     step: 1,
+    section: "Rotation",
   },
 ]
 
@@ -27,7 +28,8 @@ async function rotateImages(files: any[], options: any) {
 
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        const angle = options.customAngle || 0
+        // Use the custom angle from options
+        const angle = options.customAngle !== undefined ? options.customAngle : 0
         
         const processedBlob = await ImageProcessor.rotateImage(file.originalFile || file.file, {
           customRotation: angle,

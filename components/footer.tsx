@@ -60,7 +60,7 @@ export function Footer() {
             <p className="text-sm text-muted-foreground mb-4">
               Professional online tools platform with 300+ utilities for developers, designers, and businesses.
             </p>
-            <p className="text-xs text-muted-foreground">© 2024 WebTools Pro. All rights reserved.</p>
+            <p className="text-xs text-muted-foreground">© 2024 PixoraTools. All rights reserved.</p>
           </div>
 
           {/* Footer Links */}

@@ -59,6 +59,7 @@ async function compressPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: `compressed_${files[0].name}`,
       }
     } else {
       // Multiple files - always create ZIP
@@ -71,12 +72,17 @@ async function compressPDF(files: any[], options: any) {
         zip.file(filename, compressedBytes)
       }
 
-      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const zipBlob = await zip.generateAsync({ 
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+      })
       const downloadUrl = URL.createObjectURL(zipBlob)
 
       return {
         success: true,
         downloadUrl,
+        filename: "compressed_pdfs.zip",
       }
     }
   } catch (error) {

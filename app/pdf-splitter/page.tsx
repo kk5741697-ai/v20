@@ -67,8 +67,9 @@ async function splitPDF(files: any[], options: any) {
 
     const file = files[0]
     
-    // Get selected pages from the UI
+    // Get selected pages from the UI - fix page parsing
     const selectedPages = options.selectedPages || []
+    console.log("Selected pages from options:", selectedPages)
     
     if (selectedPages.length === 0) {
       return {
@@ -77,14 +78,22 @@ async function splitPDF(files: any[], options: any) {
       }
     }
     
-    // Convert selected page keys to page numbers
+    // Convert selected page keys to page numbers - improved parsing
     const pageNumbers = selectedPages
       .map((pageKey: string) => {
-        const parts = pageKey.split('-')
-        return parseInt(parts[parts.length - 1])
+        // Handle different page key formats
+        if (pageKey.includes('-page-')) {
+          const parts = pageKey.split('-page-')
+          return parseInt(parts[1])
+        } else {
+          const parts = pageKey.split('-')
+          return parseInt(parts[parts.length - 1])
+        }
       })
       .filter((num: number) => !isNaN(num))
       .sort((a: number, b: number) => a - b)
+    
+    console.log("Parsed page numbers:", pageNumbers)
     
     if (pageNumbers.length === 0) {
       return {
@@ -93,13 +102,22 @@ async function splitPDF(files: any[], options: any) {
       }
     }
     
-    // Create page ranges from selected pages
-    const pageRanges = pageNumbers.map(pageNum => ({ from: pageNum, to: pageNum }))
+    // Create page ranges from selected pages - ensure correct format
+    const pageRanges = pageNumbers.map(pageNum => ({ 
+      from: pageNum, 
+      to: pageNum 
+    }))
+    
+    console.log("Page ranges for extraction:", pageRanges)
     
     const splitResults = await PDFProcessor.splitPDF(
       file.originalFile || file.file, 
       pageRanges, 
-      { ...options, extractMode: "pages" }
+      { 
+        ...options, 
+        extractMode: "pages",
+        selectedPages: pageNumbers.map(num => `${file.id}-page-${num}`)
+      }
     )
 
     if (splitResults.length === 1) {
@@ -137,6 +155,7 @@ async function splitPDF(files: any[], options: any) {
       }
     }
   } catch (error) {
+    console.error("Split PDF error:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to split PDF",

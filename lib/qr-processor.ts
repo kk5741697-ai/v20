@@ -117,7 +117,7 @@ export class QRProcessor {
           resolve(canvas.toDataURL("image/png"))
         } catch (error) {
           console.error("QR enhancement failed:", error)
-          resolve(qrDataURL) // Return original on error
+          resolve(qrDataURL) // Return original QR on styling error
         }
       }
       img.onerror = () => resolve(qrDataURL)
@@ -128,14 +128,14 @@ export class QRProcessor {
   private static async applyQRStyling(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, style: any, size: number): Promise<void> {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const data = imageData.data
-    const moduleSize = Math.floor(size / 25) // Approximate QR module size
+    const moduleSize = Math.floor(size / 29) // More accurate QR module size
 
     // Apply different styles based on configuration
-    if (style.shape === "rounded" || style.corners === "rounded") {
+    if (style.shape === "rounded") {
       this.applyRoundedStyle(data, canvas.width, canvas.height, moduleSize)
     }
 
-    if (style.shape === "dots" || style.dots === "dots") {
+    if (style.shape === "dots") {
       this.applyDotStyle(data, canvas.width, canvas.height, moduleSize)
     }
 
@@ -152,7 +152,7 @@ export class QRProcessor {
   }
 
   private static applyRoundedStyle(data: Uint8ClampedArray, width: number, height: number, moduleSize: number): void {
-    const cornerRadius = moduleSize * 0.3
+    const cornerRadius = moduleSize * 0.25 // Reduced for better scanning
 
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -163,6 +163,13 @@ export class QRProcessor {
           const moduleY = Math.floor(y / moduleSize)
           const pixelInModuleX = x % moduleSize
           const pixelInModuleY = y % moduleSize
+          
+          // Skip finder patterns (corners) to maintain scannability
+          if ((moduleX < 9 && moduleY < 9) || 
+              (moduleX >= width/moduleSize - 9 && moduleY < 9) ||
+              (moduleX < 9 && moduleY >= height/moduleSize - 9)) {
+            continue
+          }
           
           // Check if pixel is in corner area
           const distanceFromCorner = Math.min(
@@ -184,12 +191,22 @@ export class QRProcessor {
   }
 
   private static applyDotStyle(data: Uint8ClampedArray, width: number, height: number, moduleSize: number): void {
-    const radius = moduleSize * 0.4
+    const radius = moduleSize * 0.35 // Reduced for better scanning
 
     for (let y = 0; y < height; y += moduleSize) {
       for (let x = 0; x < width; x += moduleSize) {
         const centerX = x + moduleSize / 2
         const centerY = y + moduleSize / 2
+        
+        // Skip finder patterns to maintain scannability
+        const moduleX = Math.floor(x / moduleSize)
+        const moduleY = Math.floor(y / moduleSize)
+        
+        if ((moduleX < 9 && moduleY < 9) || 
+            (moduleX >= width/moduleSize - 9 && moduleY < 9) ||
+            (moduleX < 9 && moduleY >= height/moduleSize - 9)) {
+          continue
+        }
         
         // Check if this module should be dark
         const centerIndex = (Math.floor(centerY) * width + Math.floor(centerX)) * 4

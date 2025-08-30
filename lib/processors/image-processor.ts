@@ -49,23 +49,6 @@ export class ImageProcessor {
         }
       }
       
-      // Apply flip transformations
-      if (options.flipDirection) {
-        ctx.save()
-        let scaleX = 1, scaleY = 1
-        
-        if (options.flipDirection === "horizontal" || options.flipDirection === "both") {
-          scaleX = -1
-        }
-        if (options.flipDirection === "vertical" || options.flipDirection === "both") {
-          scaleY = -1
-        }
-        
-        ctx.translate(canvas.width / 2, canvas.height / 2)
-        ctx.scale(scaleX, scaleY)
-        ctx.translate(-canvas.width / 2, -canvas.height / 2)
-      }
-      
       // Create result canvas
       const resultCanvas = document.createElement("canvas")
       const resultCtx = resultCanvas.getContext("2d")!
@@ -84,14 +67,42 @@ export class ImageProcessor {
       resultCtx.imageSmoothingQuality = "high"
       resultCtx.drawImage(canvas, 0, 0, resultCanvas.width, resultCanvas.height)
       
-      if (options.flipDirection) {
-        ctx.restore()
-      }
-      
       return resultCanvas
     }, options)
   }
 
+  static async flipImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
+    return this.processImageSafely(file, async (canvas, ctx) => {
+      const resultCanvas = document.createElement("canvas")
+      const resultCtx = resultCanvas.getContext("2d")!
+      
+      resultCanvas.width = canvas.width
+      resultCanvas.height = canvas.height
+      
+      // Apply flip transformations
+      resultCtx.save()
+      
+      let scaleX = 1, scaleY = 1
+      
+      if (options.flipDirection === "horizontal" || options.flipDirection === "both") {
+        scaleX = -1
+      }
+      if (options.flipDirection === "vertical" || options.flipDirection === "both") {
+        scaleY = -1
+      }
+      
+      // Apply transformation
+      resultCtx.translate(canvas.width / 2, canvas.height / 2)
+      resultCtx.scale(scaleX, scaleY)
+      resultCtx.translate(-canvas.width / 2, -canvas.height / 2)
+      
+      // Draw flipped image
+      resultCtx.drawImage(canvas, 0, 0)
+      resultCtx.restore()
+      
+      return resultCanvas
+    }, { ...options, outputFormat: "png" })
+  }
   static async compressImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return this.processImageSafely(file, async (canvas, ctx) => {
       // Apply compression by adjusting quality and format
@@ -139,7 +150,8 @@ export class ImageProcessor {
 
   static async rotateImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return this.processImageSafely(file, async (canvas, ctx) => {
-      const angle = (options.customRotation || 0) * Math.PI / 180
+      // Use the exact angle from options
+      const angle = (options.customRotation !== undefined ? options.customRotation : 0) * Math.PI / 180
       
       // Calculate new canvas dimensions for rotation
       const cos = Math.abs(Math.cos(angle))
@@ -212,12 +224,13 @@ export class ImageProcessor {
       // Draw original image
       resultCtx.drawImage(canvas, 0, 0)
       
-      // Add watermark
-      if (watermarkText && watermarkText.trim()) {
+      // Add text watermark
+      if (watermarkText && watermarkText.trim() && !options.useImageWatermark) {
         resultCtx.save()
         resultCtx.globalAlpha = options.watermarkOpacity || 0.5
         
-        const fontSize = options.fontSize || Math.min(canvas.width, canvas.height) * 0.05
+        // Use actual fontSize from options
+        const fontSize = Math.max(12, Math.min(120, options.fontSize || 48))
         resultCtx.font = `bold ${fontSize}px Arial`
         resultCtx.fillStyle = options.textColor || "#ffffff"
         
@@ -267,6 +280,55 @@ export class ImageProcessor {
         resultCtx.textBaseline = "middle"
         resultCtx.fillText(watermarkText, x, y)
         resultCtx.restore()
+      }
+      
+      // Add image watermark
+      if (options.useImageWatermark && options.watermarkImageUrl) {
+        try {
+          const watermarkImg = new Image()
+          watermarkImg.crossOrigin = "anonymous"
+          
+          await new Promise<void>((resolve, reject) => {
+            watermarkImg.onload = () => {
+              resultCtx.save()
+              resultCtx.globalAlpha = options.watermarkOpacity || 0.5
+              
+              const watermarkSize = Math.min(canvas.width, canvas.height) * 0.2
+              let x: number, y: number
+              
+              switch (options.position) {
+                case "top-left":
+                  x = 20
+                  y = 20
+                  break
+                case "top-right":
+                  x = canvas.width - watermarkSize - 20
+                  y = 20
+                  break
+                case "bottom-left":
+                  x = 20
+                  y = canvas.height - watermarkSize - 20
+                  break
+                case "bottom-right":
+                  x = canvas.width - watermarkSize - 20
+                  y = canvas.height - watermarkSize - 20
+                  break
+                default: // center
+                  x = (canvas.width - watermarkSize) / 2
+                  y = (canvas.height - watermarkSize) / 2
+                  break
+              }
+              
+              resultCtx.drawImage(watermarkImg, x, y, watermarkSize, watermarkSize)
+              resultCtx.restore()
+              resolve()
+            }
+            watermarkImg.onerror = reject
+            watermarkImg.src = options.watermarkImageUrl
+          })
+        } catch (error) {
+          console.error("Failed to load watermark image:", error)
+        }
       }
       
       return resultCanvas
@@ -322,34 +384,60 @@ export class ImageProcessor {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const data = imageData.data
       
-      // Enhanced background removal with better edge detection
-      const sensitivity = options.sensitivity || 25
+      // Real background removal algorithm
+      const sensitivity = Math.max(10, Math.min(50, options.sensitivity || 25))
+      
+      // Sample background colors from edges
       const backgroundColors = this.sampleBackgroundColors(data, canvas.width, canvas.height)
       
-      // Apply background removal
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-        
-        // Calculate distance to background colors
-        let minDistance = Infinity
-        backgroundColors.forEach(bgColor => {
-          const distance = Math.sqrt(
-            Math.pow(r - bgColor.r, 2) +
-            Math.pow(g - bgColor.g, 2) +
-            Math.pow(b - bgColor.b, 2)
-          )
-          minDistance = Math.min(minDistance, distance)
-        })
-        
-        // Apply background removal with feathering
-        if (minDistance < sensitivity * 3) {
-          if (options.featherEdges !== false) {
-            const alpha = Math.max(0, Math.min(255, (minDistance / (sensitivity * 3)) * 255))
-            data[i + 3] = alpha
-          } else {
-            data[i + 3] = 0
+      // Create mask for background pixels
+      const mask = new Uint8Array(canvas.width * canvas.height)
+      
+      // First pass: identify background pixels
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const idx = y * canvas.width + x
+          const pixelIdx = idx * 4
+          
+          const r = data[pixelIdx]
+          const g = data[pixelIdx + 1]
+          const b = data[pixelIdx + 2]
+          
+          // Calculate distance to background colors
+          let minDistance = Infinity
+          backgroundColors.forEach(bgColor => {
+            const distance = Math.sqrt(
+              Math.pow(r - bgColor.r, 2) +
+              Math.pow(g - bgColor.g, 2) +
+              Math.pow(b - bgColor.b, 2)
+            )
+            minDistance = Math.min(minDistance, distance)
+          })
+          
+          // Mark as background if similar to background colors
+          mask[idx] = minDistance < sensitivity * 3 ? 1 : 0
+        }
+      }
+      
+      // Second pass: flood fill from edges to catch connected background
+      this.floodFillBackground(mask, canvas.width, canvas.height, sensitivity)
+      
+      // Third pass: apply background removal with feathering
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const idx = y * canvas.width + x
+          const pixelIdx = idx * 4
+          
+          if (mask[idx] === 1) {
+            // Background pixel
+            if (options.featherEdges !== false) {
+              // Apply feathering
+              const featherDistance = this.calculateFeatherDistance(mask, x, y, canvas.width, canvas.height)
+              const alpha = Math.max(0, Math.min(255, featherDistance * 255))
+              data[pixelIdx + 3] = alpha
+            } else {
+              data[pixelIdx + 3] = 0
+            }
           }
         }
       }
@@ -357,6 +445,84 @@ export class ImageProcessor {
       ctx.putImageData(imageData, 0, 0)
       return canvas
     }, { ...options, outputFormat: "png" })
+  }
+
+  private static floodFillBackground(
+    mask: Uint8Array,
+    width: number,
+    height: number,
+    sensitivity: number
+  ): void {
+    const stack: Array<{ x: number; y: number }> = []
+    
+    // Start flood fill from all edge pixels marked as background
+    for (let x = 0; x < width; x++) {
+      if (mask[x] === 1) stack.push({ x, y: 0 })
+      if (mask[(height - 1) * width + x] === 1) stack.push({ x, y: height - 1 })
+    }
+    for (let y = 0; y < height; y++) {
+      if (mask[y * width] === 1) stack.push({ x: 0, y })
+      if (mask[y * width + width - 1] === 1) stack.push({ x: width - 1, y })
+    }
+    
+    const visited = new Set<number>()
+    
+    while (stack.length > 0) {
+      const { x, y } = stack.pop()!
+      const idx = y * width + x
+      
+      if (visited.has(idx) || x < 0 || x >= width || y < 0 || y >= height) {
+        continue
+      }
+      
+      visited.add(idx)
+      
+      if (mask[idx] === 1) {
+        // Mark connected pixels
+        const neighbors = [
+          { x: x - 1, y }, { x: x + 1, y },
+          { x, y: y - 1 }, { x, y: y + 1 }
+        ]
+        
+        // Calculate distance to background colors
+        neighbors.forEach(neighbor => {
+          if (neighbor.x >= 0 && neighbor.x < width && neighbor.y >= 0 && neighbor.y < height) {
+            const neighborIdx = neighbor.y * width + neighbor.x
+            if (!visited.has(neighborIdx) && mask[neighborIdx] === 1) {
+              stack.push(neighbor)
+            }
+          }
+        })
+      }
+    }
+  }
+
+  private static calculateFeatherDistance(
+    mask: Uint8Array,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number {
+    let minDistance = Infinity
+    const searchRadius = 5
+    
+    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const nIdx = ny * width + nx
+          if (mask[nIdx] === 0) { // Foreground pixel
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            minDistance = Math.min(minDistance, distance)
+          }
+        }
+      }
+    }
+    
+    return Math.max(0, 1 - minDistance / searchRadius)
   }
 
   private static sampleBackgroundColors(

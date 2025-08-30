@@ -44,11 +44,15 @@ const allTools: SearchResult[] = [
 
   // QR Tools
   { title: "QR Code Generator", description: "Create custom QR codes", href: "/qr-code-generator", category: "QR", icon: QrCode },
+  { title: "WiFi QR Generator", description: "Create WiFi QR codes", href: "/wifi-qr-generator", category: "QR", icon: QrCode },
+  { title: "vCard QR Generator", description: "Generate contact QR codes", href: "/vcard-qr-generator", category: "QR", icon: QrCode },
+  { title: "Email QR Generator", description: "Create email QR codes", href: "/qr-code-generator", category: "QR", icon: QrCode },
+  { title: "SMS QR Generator", description: "Create SMS QR codes", href: "/qr-code-generator", category: "QR", icon: QrCode },
+  { title: "Phone QR Generator", description: "Create phone QR codes", href: "/qr-code-generator", category: "QR", icon: QrCode },
+  { title: "Location QR Generator", description: "Create location QR codes", href: "/qr-code-generator", category: "QR", icon: QrCode },
   { title: "QR Scanner", description: "Scan QR codes from images", href: "/qr-scanner", category: "QR", icon: QrCode },
   { title: "Barcode Generator", description: "Generate various barcodes", href: "/barcode-generator", category: "QR", icon: QrCode },
   { title: "Bulk QR Generator", description: "Generate multiple QR codes", href: "/bulk-qr-generator", category: "QR", icon: QrCode },
-  { title: "WiFi QR Generator", description: "Create WiFi QR codes", href: "/wifi-qr-generator", category: "QR", icon: QrCode },
-  { title: "vCard QR Generator", description: "Generate contact QR codes", href: "/vcard-qr-generator", category: "QR", icon: QrCode },
 
   // Text Tools
   { title: "JSON Formatter", description: "Format and validate JSON", href: "/json-formatter", category: "Text", icon: Code },
@@ -92,11 +96,45 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
       return
     }
 
-    const filtered = allTools.filter(tool =>
-      tool.title.toLowerCase().includes(query.toLowerCase()) ||
-      tool.description.toLowerCase().includes(query.toLowerCase()) ||
-      tool.category.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 10)
+    const searchTerm = query.toLowerCase()
+    
+    // Enhanced search with ranking
+    const scored = allTools.map(tool => {
+      let score = 0
+      const title = tool.title.toLowerCase()
+      const description = tool.description.toLowerCase()
+      const category = tool.category.toLowerCase()
+      
+      // Exact title match gets highest score
+      if (title === searchTerm) score += 100
+      else if (title.startsWith(searchTerm)) score += 80
+      else if (title.includes(searchTerm)) score += 60
+      
+      // Description matches
+      if (description.includes(searchTerm)) score += 40
+      
+      // Category matches
+      if (category.includes(searchTerm)) score += 30
+      
+      // Fuzzy matching for typos
+      const titleWords = title.split(' ')
+      const searchWords = searchTerm.split(' ')
+      
+      searchWords.forEach(searchWord => {
+        titleWords.forEach(titleWord => {
+          if (titleWord.includes(searchWord) || searchWord.includes(titleWord)) {
+            score += 20
+          }
+        })
+      })
+      
+      return { ...tool, score }
+    })
+    
+    const filtered = scored
+      .filter(tool => tool.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
 
     setResults(filtered)
   }, [query])

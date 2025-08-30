@@ -539,66 +539,26 @@ export default function ImageFiltersPage() {
           {/* Canvas Content - Before/After View */}
           <div className="flex-1 overflow-hidden p-6">
             {file ? (
-              <div className="grid grid-cols-2 gap-6 h-full">
-                {/* Before */}
-                <Card className="h-full">
-                  <CardHeader>
-                    <CardTitle>Before</CardTitle>
-                    <CardDescription>Original image</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex items-center justify-center">
-                    <div className="relative max-w-full max-h-full">
-                      <img
-                        src={file.preview}
-                        alt="Original"
-                        className="max-w-full max-h-[50vh] object-contain border border-gray-300 rounded-lg shadow-lg bg-white"
-                        style={{ 
-                          transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
-                          transition: "transform 0.2s ease"
-                        }}
-                      />
-                      <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                        {file.dimensions?.width}×{file.dimensions?.height}
-                      </div>
+              <div className="flex items-center justify-center h-full">
+                <div className="relative max-w-full max-h-full">
+                  <img
+                    src={file.processedPreview || file.preview}
+                    alt="Filtered Image"
+                    className="max-w-full max-h-[80vh] object-contain border border-gray-300 rounded-lg shadow-lg bg-white"
+                    style={{ 
+                      transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
+                      transition: "transform 0.2s ease"
+                    }}
+                  />
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    {file.dimensions?.width}×{file.dimensions?.height}
+                  </div>
+                  {file.processedPreview && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* After */}
-                <Card className="h-full">
-                  <CardHeader>
-                    <CardTitle>After</CardTitle>
-                    <CardDescription>Filtered image</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex items-center justify-center">
-                    {file.processedPreview ? (
-                      <div className="relative max-w-full max-h-full">
-                        <img
-                          src={file.processedPreview}
-                          alt="Filtered"
-                          className="max-w-full max-h-[50vh] object-contain border border-gray-300 rounded-lg shadow-lg bg-white"
-                          style={{ 
-                            transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
-                            transition: "transform 0.2s ease"
-                          }}
-                        />
-                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                          {file.dimensions?.width}×{file.dimensions?.height}
-                        </div>
-                        {file.processedPreview && (
-                          <div className="absolute top-2 right-2">
-                            <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center text-gray-500">
-                        <Palette className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                        <p>Filtered image will appear here</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-center max-w-md mx-auto">
@@ -615,8 +575,8 @@ export default function ImageFiltersPage() {
           </div>
         </div>
 
-        {/* Desktop Right Sidebar */}
-        <div className="w-80 xl:w-96 bg-white border-l shadow-lg flex flex-col h-full">
+        {/* Desktop Right Sidebar - No Ads */}
+        <div className="w-80 bg-white border-l shadow-lg flex flex-col h-full">
           <div className="px-6 py-4 border-b bg-gray-50 flex-shrink-0">
             <div className="flex items-center space-x-2">
               <Palette className="h-5 w-5 text-purple-600" />
@@ -682,13 +642,6 @@ export default function ImageFiltersPage() {
                         <span>Effects:</span>
                         <span className="font-medium">
                           {toolOptions.sepia ? 'Sepia ' : ''}
-                          {toolOptions.grayscale ? 'Grayscale' : ''}
-                          {!toolOptions.sepia && !toolOptions.grayscale ? 'None' : ''}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </ScrollArea>
           </div>

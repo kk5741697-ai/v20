@@ -110,7 +110,11 @@ async function addWatermarkToPDF(files: any[], options: any) {
         zip.file(filename, watermarkedBytes)
       }
 
-      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const zipBlob = await zip.generateAsync({ 
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+      })
       const downloadUrl = URL.createObjectURL(zipBlob)
 
       return {

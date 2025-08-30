@@ -15,6 +15,7 @@ const convertOptions = [
       { value: "png", label: "PNG" },
       { value: "webp", label: "WebP" },
     ],
+    section: "Output",
   },
 ]
 
@@ -72,7 +73,7 @@ export default function ImageConverterPage() {
   return (
     <ImageToolsLayout
       title="Image Converter"
-      description="Convert images between different formats including JPEG, PNG, and WebP. Apply rotation, flipping, and adjustments during conversion."
+      description="Convert images between different formats: JPEG, PNG, and WebP with quality preservation."
       icon={RefreshCw}
       toolType="convert"
       processFunction={convertImages}

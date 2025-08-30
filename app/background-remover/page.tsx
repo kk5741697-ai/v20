@@ -25,13 +25,12 @@ import {
   Maximize2,
   AlertCircle,
   Settings,
-  ImageIcon,
   Scissors,
-  Pause,
-  Play,
-  Square
+  Eye,
+  EyeOff
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { ImageProcessor } from "@/lib/processors/image-processor"
 import { AdBanner } from "@/components/ads/ad-banner"
 
 interface ImageFile {
@@ -46,118 +45,68 @@ interface ImageFile {
   processedPreview?: string
   processedSize?: number
   blob?: Blob
-  processingStage?: string
   error?: string
 }
 
-interface ProcessingState {
-  isProcessing: boolean
-  isPaused: boolean
-  canCancel: boolean
-  progress: number
-  stage: string
-  currentFile?: string
-  processedCount: number
-  totalFiles: number
-  estimatedTimeRemaining?: number
-}
+const backgroundRemovalOptions = [
+  {
+    key: "algorithm",
+    label: "Algorithm",
+    type: "select" as const,
+    defaultValue: "auto",
+    selectOptions: [
+      { value: "auto", label: "Auto (Recommended)" },
+      { value: "portrait", label: "Portrait & People" },
+      { value: "object", label: "Objects & Products" },
+      { value: "general", label: "General Purpose" },
+    ],
+  },
+  {
+    key: "sensitivity",
+    label: "Sensitivity",
+    type: "slider" as const,
+    defaultValue: 25,
+    min: 10,
+    max: 50,
+    step: 5,
+  },
+  {
+    key: "featherEdges",
+    label: "Feather Edges",
+    type: "checkbox" as const,
+    defaultValue: true,
+  },
+  {
+    key: "preserveDetails",
+    label: "Preserve Details",
+    type: "checkbox" as const,
+    defaultValue: true,
+  },
+]
 
 export default function BackgroundRemoverPage() {
   const [files, setFiles] = useState<ImageFile[]>([])
-  const [processingState, setProcessingState] = useState<ProcessingState>({
-    isProcessing: false,
-    isPaused: false,
-    canCancel: false,
-    progress: 0,
-    stage: "Ready",
-    processedCount: 0,
-    totalFiles: 0
+  const [toolOptions, setToolOptions] = useState<Record<string, any>>({
+    algorithm: "auto",
+    sensitivity: 25,
+    featherEdges: true,
+    preserveDetails: true,
   })
-  const [algorithm, setAlgorithm] = useState("auto")
-  const [sensitivity, setSensitivity] = useState([25])
-  const [featherEdges, setFeatherEdges] = useState(true)
-  const [preserveDetails, setPreserveDetails] = useState(true)
-  const [outputFormat, setOutputFormat] = useState("png")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const [processingStage, setProcessingStage] = useState("")
   const [zoomLevel, setZoomLevel] = useState(100)
   const [showUploadArea, setShowUploadArea] = useState(true)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [showBefore, setShowBefore] = useState(true)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const processingWorkerRef = useRef<Worker | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const processStartTimeRef = useRef<number>(0)
-
-  // Enhanced memory management
-  useEffect(() => {
-    const cleanup = () => {
-      // Clean up blob URLs
-      files.forEach(file => {
-        if (file.preview && file.preview.startsWith('blob:')) {
-          URL.revokeObjectURL(file.preview)
-        }
-        if (file.processedPreview && file.processedPreview.startsWith('blob:')) {
-          URL.revokeObjectURL(file.processedPreview)
-        }
-      })
-      
-      // Terminate worker
-      if (processingWorkerRef.current) {
-        processingWorkerRef.current.terminate()
-        processingWorkerRef.current = null
-      }
-      
-      // Cancel any ongoing operations
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-
-    // Cleanup on unmount
-    return cleanup
-  }, [])
-
-  // Memory monitoring and cleanup
-  useEffect(() => {
-    const memoryCleanupInterval = setInterval(() => {
-      if (!processingState.isProcessing) {
-        // Force garbage collection if available
-        if ('gc' in window && typeof (window as any).gc === 'function') {
-          (window as any).gc()
-        }
-        
-        // Monitor memory usage
-        if ('memory' in performance) {
-          const memory = (performance as any).memory
-          const usedMB = memory.usedJSHeapSize / 1024 / 1024
-          
-          if (usedMB > 200) { // If using more than 200MB
-            console.warn(`High memory usage detected: ${usedMB.toFixed(1)}MB`)
-            // Clean up old blob URLs
-            const images = document.querySelectorAll('img[src^="blob:"]')
-            images.forEach(img => {
-              if (img instanceof HTMLImageElement && img.src !== files.find(f => f.preview === img.src)?.preview) {
-                URL.revokeObjectURL(img.src)
-              }
-            })
-          }
-        }
-      }
-    }, 10000) // Every 10 seconds
-
-    return () => clearInterval(memoryCleanupInterval)
-  }, [processingState.isProcessing, files])
 
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
 
-    // Enhanced file validation with size limits
-    const maxFileSize = 50 * 1024 * 1024 // 50MB absolute limit
-    const maxTotalSize = 200 * 1024 * 1024 // 200MB total limit
-    const maxFiles = 10
-
-    const validFiles: File[] = []
-    let totalSize = files.reduce((sum, f) => sum + f.size, 0)
-
+    const newFiles: ImageFile[] = []
+    
     for (const file of Array.from(uploadedFiles)) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -168,54 +117,34 @@ export default function BackgroundRemoverPage() {
         continue
       }
 
-      if (file.size > maxFileSize) {
+      // Enhanced file size checking
+      if (file.size > 25 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: `${file.name} is ${Math.round(file.size / (1024 * 1024))}MB. Maximum 50MB allowed.`,
+          description: `${file.name} is ${Math.round(file.size / (1024 * 1024))}MB. Maximum 25MB allowed.`,
           variant: "destructive"
         })
         continue
       }
 
-      if (totalSize + file.size > maxTotalSize) {
-        toast({
-          title: "Total size limit exceeded",
-          description: "Maximum 200MB total file size allowed",
-          variant: "destructive"
-        })
-        break
-      }
-
-      if (files.length + validFiles.length >= maxFiles) {
+      if (files.length + newFiles.length >= 5) {
         toast({
           title: "Too many files",
-          description: `Maximum ${maxFiles} files allowed`,
+          description: "Maximum 5 files allowed for background removal",
           variant: "destructive"
         })
         break
       }
 
-      validFiles.push(file)
-      totalSize += file.size
-    }
-
-    if (validFiles.length === 0) return
-
-    // Process files with safety checks
-    const newFiles: ImageFile[] = []
-    
-    for (const file of validFiles) {
       try {
         const dimensions = await getImageDimensions(file)
         
-        // Additional safety check for very large images
-        if (dimensions.width * dimensions.height > 4096 * 4096) {
+        // Check image resolution
+        if (dimensions.width * dimensions.height > 1536 * 1536) {
           toast({
             title: "Image resolution too high",
-            description: `${file.name} has very high resolution (${dimensions.width}x${dimensions.height}). This may cause processing issues.`,
-            variant: "destructive"
+            description: `${file.name} has very high resolution. This may cause processing issues.`,
           })
-          continue
         }
         
         const preview = await createImagePreview(file)
@@ -253,10 +182,7 @@ export default function BackgroundRemoverPage() {
   const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
     return new Promise((resolve, reject) => {
       const img = new Image()
-      img.onload = () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight })
-        URL.revokeObjectURL(img.src)
-      }
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
       img.onerror = reject
       img.src = URL.createObjectURL(file)
     })
@@ -281,350 +207,24 @@ export default function BackgroundRemoverPage() {
   }, [])
 
   const removeFile = (fileId: string) => {
-    setFiles(prev => {
-      const fileToRemove = prev.find(f => f.id === fileId)
-      if (fileToRemove) {
-        // Clean up blob URLs
-        if (fileToRemove.preview && fileToRemove.preview.startsWith('blob:')) {
-          URL.revokeObjectURL(fileToRemove.preview)
-        }
-        if (fileToRemove.processedPreview && fileToRemove.processedPreview.startsWith('blob:')) {
-          URL.revokeObjectURL(fileToRemove.processedPreview)
-        }
-      }
-      
-      const newFiles = prev.filter(f => f.id !== fileId)
-      if (newFiles.length === 0) {
-        setShowUploadArea(true)
-      }
-      return newFiles
-    })
+    setFiles(prev => prev.filter(f => f.id !== fileId))
+    if (files.length === 1) {
+      setShowUploadArea(true)
+    }
   }
 
   const resetTool = () => {
-    // Cancel any ongoing processing
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-    
-    // Terminate worker
-    if (processingWorkerRef.current) {
-      processingWorkerRef.current.terminate()
-      processingWorkerRef.current = null
-    }
-    
-    // Clean up files
-    files.forEach(file => {
-      if (file.preview && file.preview.startsWith('blob:')) {
-        URL.revokeObjectURL(file.preview)
-      }
-      if (file.processedPreview && file.processedPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(file.processedPreview)
-      }
-    })
-    
     setFiles([])
-    setProcessingState({
-      isProcessing: false,
-      isPaused: false,
-      canCancel: false,
-      progress: 0,
-      stage: "Ready",
-      processedCount: 0,
-      totalFiles: 0
-    })
+    setProcessingProgress(0)
+    setProcessingStage("")
     setShowUploadArea(true)
     setIsMobileSidebarOpen(false)
-  }
-
-  const pauseProcessing = () => {
-    setProcessingState(prev => ({ ...prev, isPaused: !prev.isPaused }))
-  }
-
-  const cancelProcessing = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-    
-    if (processingWorkerRef.current) {
-      processingWorkerRef.current.terminate()
-      processingWorkerRef.current = null
-    }
-    
-    setProcessingState(prev => ({
-      ...prev,
-      isProcessing: false,
-      isPaused: false,
-      canCancel: false,
-      stage: "Cancelled"
-    }))
-    
-    toast({
-      title: "Processing cancelled",
-      description: "Background removal process has been stopped"
+    setToolOptions({
+      algorithm: "auto",
+      sensitivity: 25,
+      featherEdges: true,
+      preserveDetails: true,
     })
-  }
-
-  const processImageSafely = async (file: ImageFile): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", {
-        alpha: true,
-        willReadFrequently: false,
-        desynchronized: true
-      })
-      
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
-      }
-
-      const img = new Image()
-      img.onload = async () => {
-        try {
-          // Calculate safe processing dimensions
-          let workingWidth = img.naturalWidth
-          let workingHeight = img.naturalHeight
-          const maxSafePixels = 1536 * 1536 // 2.3MP for stability
-          
-          // Scale down if too large
-          if (workingWidth * workingHeight > maxSafePixels) {
-            const scale = Math.sqrt(maxSafePixels / (workingWidth * workingHeight))
-            workingWidth = Math.floor(workingWidth * scale)
-            workingHeight = Math.floor(workingHeight * scale)
-          }
-          
-          canvas.width = Math.max(1, workingWidth)
-          canvas.height = Math.max(1, workingHeight)
-          
-          // High quality rendering
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = "high"
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-          
-          // Get image data for processing
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          
-          // Apply background removal with chunked processing
-          await processBackgroundRemovalChunked(imageData, {
-            algorithm,
-            sensitivity: sensitivity[0],
-            featherEdges,
-            preserveDetails
-          })
-          
-          // Put processed data back
-          ctx.putImageData(imageData, 0, 0)
-          
-          // Create output blob
-          const quality = outputFormat === "jpeg" ? 0.9 : 1.0
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create output"))
-              }
-            },
-            `image/${outputFormat}`,
-            quality
-          )
-        } catch (error) {
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(file.originalFile || file.file)
-    })
-  }
-
-  const processBackgroundRemovalChunked = async (
-    imageData: ImageData,
-    options: any
-  ): Promise<void> => {
-    const { data, width, height } = imageData
-    const chunkSize = 256 // Process in 256x256 chunks
-    const totalChunks = Math.ceil(width / chunkSize) * Math.ceil(height / chunkSize)
-    let processedChunks = 0
-
-    // Create background mask using edge detection
-    const backgroundMask = new Uint8Array(width * height)
-    
-    // Process in chunks to prevent blocking
-    for (let startY = 0; startY < height; startY += chunkSize) {
-      for (let startX = 0; startX < width; startX += chunkSize) {
-        // Check if processing should be paused or cancelled
-        if (abortControllerRef.current?.signal.aborted) {
-          throw new Error("Processing cancelled")
-        }
-        
-        while (processingState.isPaused) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-        
-        const endX = Math.min(startX + chunkSize, width)
-        const endY = Math.min(startY + chunkSize, height)
-        
-        // Process chunk
-        await processChunk(data, backgroundMask, startX, startY, endX, endY, width, height, options)
-        
-        processedChunks++
-        const chunkProgress = (processedChunks / totalChunks) * 50 // First 50% for mask creation
-        
-        setProcessingState(prev => ({
-          ...prev,
-          progress: chunkProgress,
-          stage: `Creating background mask... ${Math.round(chunkProgress)}%`
-        }))
-        
-        // Allow browser to breathe
-        await new Promise(resolve => setTimeout(resolve, 1))
-      }
-    }
-    
-    // Apply background removal with the mask
-    setProcessingState(prev => ({
-      ...prev,
-      progress: 50,
-      stage: "Applying background removal..."
-    }))
-    
-    await applyBackgroundMask(data, backgroundMask, width, height, options)
-    
-    setProcessingState(prev => ({
-      ...prev,
-      progress: 100,
-      stage: "Complete"
-    }))
-  }
-
-  const processChunk = async (
-    data: Uint8ClampedArray,
-    mask: Uint8Array,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-    width: number,
-    height: number,
-    options: any
-  ): Promise<void> => {
-    const sensitivity = options.sensitivity || 25
-    const threshold = sensitivity * 2.5
-    
-    // Simple edge-based background detection for chunk
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const idx = y * width + x
-        const pixelIdx = idx * 4
-        
-        // Check if pixel is near image border (likely background)
-        const isNearBorder = x < width * 0.05 || x > width * 0.95 || 
-                            y < height * 0.05 || y > height * 0.95
-        
-        if (isNearBorder) {
-          mask[idx] = 255 // Mark as background
-          continue
-        }
-        
-        // Calculate color distance from corners (background sampling)
-        const corners = [
-          [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]
-        ]
-        
-        let minDistanceToCorner = Infinity
-        corners.forEach(([cx, cy]) => {
-          const cornerIdx = (cy * width + cx) * 4
-          const distance = Math.sqrt(
-            Math.pow(data[pixelIdx] - data[cornerIdx], 2) +
-            Math.pow(data[pixelIdx + 1] - data[cornerIdx + 1], 2) +
-            Math.pow(data[pixelIdx + 2] - data[cornerIdx + 2], 2)
-          )
-          minDistanceToCorner = Math.min(minDistanceToCorner, distance)
-        })
-        
-        // Mark as background if similar to corners
-        mask[idx] = minDistanceToCorner < threshold ? 255 : 0
-      }
-    }
-  }
-
-  const applyBackgroundMask = async (
-    data: Uint8ClampedArray,
-    mask: Uint8Array,
-    width: number,
-    height: number,
-    options: any
-  ): Promise<void> => {
-    const chunkSize = 512
-    const totalPixels = width * height
-    let processedPixels = 0
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const pixelIdx = Math.floor(i / 4)
-      const maskValue = mask[pixelIdx]
-      
-      if (maskValue > 128) {
-        // Background pixel - apply transparency with feathering
-        if (options.featherEdges) {
-          const featherDistance = calculateFeatherDistance(mask, pixelIdx, width, height)
-          const alpha = Math.max(0, Math.min(255, featherDistance * 255))
-          data[i + 3] = alpha
-        } else {
-          data[i + 3] = 0
-        }
-      } else if (options.preserveDetails) {
-        // Foreground pixel - slightly enhance
-        data[i + 3] = Math.min(255, data[i + 3] * 1.02)
-      }
-      
-      processedPixels++
-      
-      // Update progress every chunk
-      if (processedPixels % chunkSize === 0) {
-        const progress = 50 + (processedPixels / totalPixels) * 50
-        setProcessingState(prev => ({
-          ...prev,
-          progress,
-          stage: `Removing background... ${Math.round(progress)}%`
-        }))
-        
-        // Allow browser to breathe
-        await new Promise(resolve => setTimeout(resolve, 1))
-      }
-    }
-  }
-
-  const calculateFeatherDistance = (
-    mask: Uint8Array,
-    pixelIdx: number,
-    width: number,
-    height: number
-  ): number => {
-    const x = pixelIdx % width
-    const y = Math.floor(pixelIdx / width)
-    
-    let minDistance = Infinity
-    const searchRadius = 8
-    
-    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
-      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
-        const nx = x + dx
-        const ny = y + dy
-        
-        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-          const nIdx = ny * width + nx
-          if (mask[nIdx] <= 128) { // Foreground pixel
-            const distance = Math.sqrt(dx * dx + dy * dy)
-            minDistance = Math.min(minDistance, distance)
-          }
-        }
-      }
-    }
-    
-    return Math.max(0, 1 - minDistance / searchRadius)
   }
 
   const handleProcess = async () => {
@@ -637,119 +237,78 @@ export default function BackgroundRemoverPage() {
       return
     }
 
-    // Initialize processing state
-    setProcessingState({
-      isProcessing: true,
-      isPaused: false,
-      canCancel: true,
-      progress: 0,
-      stage: "Initializing...",
-      processedCount: 0,
-      totalFiles: files.length
-    })
-
-    processStartTimeRef.current = Date.now()
-    abortControllerRef.current = new AbortController()
+    setIsProcessing(true)
+    setProcessingProgress(0)
+    setProcessingStage("Initializing")
 
     try {
-      const processedFiles: ImageFile[] = []
-      
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        
-        // Check for cancellation
-        if (abortControllerRef.current.signal.aborted) {
-          throw new Error("Processing cancelled")
-        }
-        
-        // Wait if paused
-        while (processingState.isPaused) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-        
-        setProcessingState(prev => ({
-          ...prev,
-          currentFile: file.name,
-          stage: `Processing ${file.name}...`,
-          processedCount: i
-        }))
-        
-        try {
-          const processedBlob = await processImageSafely(file)
-          const processedUrl = URL.createObjectURL(processedBlob)
-          
-          const processedFile = {
-            ...file,
-            processed: true,
-            processedPreview: processedUrl,
-            processedSize: processedBlob.size,
-            blob: processedBlob
+      const processedFiles = await Promise.all(
+        files.map(async (file, index) => {
+          try {
+            setProcessingStage(`Processing ${file.name}`)
+            
+            const progressCallback = (progress: number, stage: string) => {
+              const fileProgress = (index / files.length) * 100 + (progress / files.length)
+              setProcessingProgress(fileProgress)
+              setProcessingStage(stage)
+            }
+
+            const processedBlob = await ImageProcessor.removeBackground(file.originalFile || file.file, {
+              ...toolOptions,
+              progressCallback
+            })
+
+            const processedUrl = URL.createObjectURL(processedBlob)
+            
+            const baseName = file.name.split(".")[0]
+            const newName = `${baseName}_no_bg.png`
+
+            return {
+              ...file,
+              processed: true,
+              processedPreview: processedUrl,
+              name: newName,
+              processedSize: processedBlob.size,
+              blob: processedBlob
+            }
+          } catch (error) {
+            console.error(`Failed to process ${file.name}:`, error)
+            return {
+              ...file,
+              processed: false,
+              error: error instanceof Error ? error.message : "Processing failed"
+            }
           }
-          
-          processedFiles.push(processedFile)
-          
-          // Update progress
-          const fileProgress = ((i + 1) / files.length) * 100
-          const timeElapsed = Date.now() - processStartTimeRef.current
-          const estimatedTotal = (timeElapsed / (i + 1)) * files.length
-          const estimatedRemaining = Math.max(0, estimatedTotal - timeElapsed)
-          
-          setProcessingState(prev => ({
-            ...prev,
-            progress: fileProgress,
-            processedCount: i + 1,
-            estimatedTimeRemaining: estimatedRemaining
-          }))
-          
-        } catch (error) {
-          console.error(`Failed to process ${file.name}:`, error)
-          
-          const errorFile = {
-            ...file,
-            processed: false,
-            error: error instanceof Error ? error.message : "Processing failed"
-          }
-          
-          processedFiles.push(errorFile)
-        }
-        
-        // Memory cleanup between files
-        if (i % 3 === 0 && 'gc' in window && typeof (window as any).gc === 'function') {
-          (window as any).gc()
-        }
-      }
-      
+        })
+      )
+
       setFiles(processedFiles)
       
       const successCount = processedFiles.filter(f => f.processed).length
-      const failCount = processedFiles.length - successCount
+      const failCount = processedFiles.filter(f => !f.processed).length
       
-      setProcessingState(prev => ({
-        ...prev,
-        isProcessing: false,
-        canCancel: false,
-        stage: "Complete",
-        progress: 100
-      }))
-      
-      toast({
-        title: "Processing complete",
-        description: `${successCount} image${successCount !== 1 ? 's' : ''} processed successfully${failCount > 0 ? `, ${failCount} failed` : ''}`
-      })
-      
+      if (successCount > 0) {
+        toast({
+          title: "Background removal complete",
+          description: `${successCount} image${successCount !== 1 ? 's' : ''} processed successfully${failCount > 0 ? `, ${failCount} failed` : ''}`
+        })
+      } else {
+        toast({
+          title: "Processing failed",
+          description: "All images failed to process. Please try with smaller images or different settings.",
+          variant: "destructive"
+        })
+      }
     } catch (error) {
-      setProcessingState(prev => ({
-        ...prev,
-        isProcessing: false,
-        canCancel: false,
-        stage: "Error"
-      }))
-      
       toast({
         title: "Processing failed",
-        description: error instanceof Error ? error.message : "Background removal failed",
+        description: error instanceof Error ? error.message : "Failed to remove backgrounds",
         variant: "destructive"
       })
+    } finally {
+      setIsProcessing(false)
+      setProcessingProgress(0)
+      setProcessingStage("")
     }
   }
 
@@ -758,7 +317,7 @@ export default function BackgroundRemoverPage() {
 
     const link = document.createElement("a")
     link.href = file.processedPreview || file.preview
-    link.download = `${file.name.split('.')[0]}_no_bg.${outputFormat}`
+    link.download = file.name
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -792,8 +351,7 @@ export default function BackgroundRemoverPage() {
 
       processedFiles.forEach((file) => {
         if (file.blob) {
-          const filename = `${file.name.split('.')[0]}_no_bg.${outputFormat}`
-          zip.file(filename, file.blob)
+          zip.file(file.name, file.blob)
         }
       })
 
@@ -826,20 +384,6 @@ export default function BackgroundRemoverPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
-  const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`
-    } else {
-      return `${seconds}s`
-    }
-  }
-
   // Mobile Sidebar Component
   const MobileSidebar = () => (
     <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
@@ -853,79 +397,81 @@ export default function BackgroundRemoverPage() {
         
         <ScrollArea className="h-full">
           <div className="p-6 space-y-6">
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">Algorithm</Label>
-                <Select value={algorithm} onValueChange={setAlgorithm}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto (Recommended)</SelectItem>
-                    <SelectItem value="portrait">Portrait Mode</SelectItem>
-                    <SelectItem value="object">Object Mode</SelectItem>
-                    <SelectItem value="general">General Purpose</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            {backgroundRemovalOptions.map((option) => (
+              <div key={option.key} className="space-y-2">
+                <Label className="text-sm font-medium">{option.label}</Label>
+                
+                {option.type === "select" && (
+                  <Select
+                    value={toolOptions[option.key]?.toString()}
+                    onValueChange={(value) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {option.selectOptions?.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
-              <div>
-                <Label className="text-sm font-medium">Sensitivity: {sensitivity[0]}</Label>
-                <Slider
-                  value={sensitivity}
-                  onValueChange={setSensitivity}
-                  min={10}
-                  max={50}
-                  step={5}
-                  className="mt-2"
-                />
-              </div>
+                {option.type === "slider" && (
+                  <div className="space-y-3">
+                    <Slider
+                      value={[toolOptions[option.key] || option.defaultValue]}
+                      onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                      min={option.min}
+                      max={option.max}
+                      step={option.step}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{option.min}</span>
+                      <span className="font-medium bg-gray-100 px-2 py-1 rounded">{toolOptions[option.key] || option.defaultValue}</span>
+                      <span>{option.max}</span>
+                    </div>
+                  </div>
+                )}
 
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Checkbox
-                    checked={featherEdges}
-                    onCheckedChange={setFeatherEdges}
-                  />
-                  <span className="text-sm">Feather Edges</span>
-                </div>
-
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Checkbox
-                    checked={preserveDetails}
-                    onCheckedChange={setPreserveDetails}
-                  />
-                  <span className="text-sm">Preserve Details</span>
-                </div>
+                {option.type === "checkbox" && (
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Checkbox
+                      checked={toolOptions[option.key] || false}
+                      onCheckedChange={(checked) => setToolOptions(prev => ({ ...prev, [option.key]: checked }))}
+                    />
+                    <span className="text-sm">{option.label}</span>
+                  </div>
+                )}
               </div>
+            ))}
 
-              <div>
-                <Label className="text-sm font-medium">Output Format</Label>
-                <Select value={outputFormat} onValueChange={setOutputFormat}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="png">PNG (Recommended)</SelectItem>
-                    <SelectItem value="webp">WebP</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Mobile Ad */}
+            <div className="py-4">
+              <AdBanner 
+                adSlot="mobile-background-sidebar"
+                adFormat="auto"
+                className="w-full"
+                mobileOptimized={true}
+              />
             </div>
           </div>
         </ScrollArea>
         
+        {/* Mobile Footer */}
         <div className="p-4 border-t bg-white space-y-3">
           <Button 
             onClick={() => {
               handleProcess()
               setIsMobileSidebarOpen(false)
             }}
-            disabled={processingState.isProcessing || files.length === 0}
+            disabled={isProcessing || files.length === 0}
             className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-base font-semibold"
             size="lg"
           >
-            {processingState.isProcessing ? (
+            {isProcessing ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Processing...
@@ -979,7 +525,7 @@ export default function BackgroundRemoverPage() {
               <h1 className="text-2xl lg:text-3xl font-heading font-bold text-foreground">Background Remover</h1>
             </div>
             <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
-              Remove image backgrounds automatically with AI-powered edge detection. Perfect for product photos, portraits, and graphics.
+              Remove image backgrounds automatically with AI-powered edge detection. Perfect for portraits, products, and objects.
             </p>
           </div>
 
@@ -1002,7 +548,7 @@ export default function BackgroundRemoverPage() {
               </Button>
               <div className="mt-4 lg:mt-6 space-y-2 text-center">
                 <p className="text-sm text-gray-500 font-medium">JPG, PNG, WebP files</p>
-                <p className="text-xs text-gray-400">Up to 10 files • Up to 50MB each</p>
+                <p className="text-xs text-gray-400">Up to 5 files • Up to 25MB each</p>
               </div>
             </div>
           </div>
@@ -1049,81 +595,93 @@ export default function BackgroundRemoverPage() {
         </div>
 
         <div className="p-4 space-y-4 min-h-[60vh]">
-          <div className="grid grid-cols-2 gap-4">
-            {files.map((file) => (
-              <Card key={file.id} className="relative">
-                <CardContent className="p-3">
+          {files.map((file) => (
+            <Card key={file.id} className="relative">
+              <CardContent className="p-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Before */}
                   <div className="relative">
+                    <div className="text-xs font-medium text-gray-600 mb-2">Before</div>
                     <img
-                      src={file.processedPreview || file.preview}
-                      alt={file.name}
+                      src={file.preview}
+                      alt="Original"
                       className="w-full aspect-square object-cover border rounded"
                     />
-                    {file.processed && (
-                      <div className="absolute top-2 right-2">
-                        <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
-                      </div>
-                    )}
-                    {file.error && (
-                      <div className="absolute top-2 right-2">
-                        <AlertCircle className="h-5 w-5 text-red-600 bg-white rounded-full" />
-                      </div>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeFile(file.id)}
-                      className="absolute top-2 left-2"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>{formatFileSize(file.size)}</span>
-                      {file.processedSize && (
-                        <span className="text-green-600">→ {formatFileSize(file.processedSize)}</span>
-                      )}
+                    <div className="mt-2 text-xs text-gray-500 text-center">
+                      {file.dimensions?.width}×{file.dimensions?.height} • {formatFileSize(file.size)}
                     </div>
-                    {file.dimensions && (
-                      <p className="text-xs text-gray-400">{file.dimensions.width}×{file.dimensions.height}</p>
-                    )}
-                    {file.error && (
-                      <p className="text-xs text-red-600 mt-1">{file.error}</p>
+                  </div>
+
+                  {/* After */}
+                  <div className="relative">
+                    <div className="text-xs font-medium text-gray-600 mb-2">After</div>
+                    {file.processedPreview ? (
+                      <div className="relative">
+                        <img
+                          src={file.processedPreview}
+                          alt="Background Removed"
+                          className="w-full aspect-square object-cover border rounded bg-gray-100"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3cdefs%3e%3cpattern id='a' patternUnits='userSpaceOnUse' width='20' height='20' patternTransform='scale(0.5) rotate(0)'%3e%3crect x='0' y='0' width='100%25' height='100%25' fill='%23f8f9fa'/%3e%3cpath d='m10 0v20M0 10h20' stroke-width='1' stroke='%23e9ecef' fill='none'/%3e%3c/pattern%3e%3c/defs%3e%3crect width='100%25' height='100%25' fill='url(%23a)'/%3e%3c/svg%3e")`,
+                            backgroundSize: "20px 20px"
+                          }}
+                        />
+                        <div className="absolute top-2 right-2">
+                          <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 text-center">
+                          {file.dimensions?.width}×{file.dimensions?.height} • {file.processedSize && formatFileSize(file.processedSize)}
+                        </div>
+                      </div>
+                    ) : file.error ? (
+                      <div className="aspect-square bg-red-50 border border-red-200 rounded flex items-center justify-center">
+                        <div className="text-center text-red-600">
+                          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-xs">{file.error}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-100 rounded border flex items-center justify-center">
+                        <div className="text-center text-gray-500">
+                          <Scissors className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-xs">Processed image will appear here</p>
+                        </div>
+                      </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeFile(file.id)}
+                  className="absolute top-2 right-2"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Mobile Canvas Ad */}
+          <div className="mt-6">
+            <AdBanner 
+              adSlot="mobile-background-canvas"
+              adFormat="auto"
+              className="w-full"
+              mobileOptimized={true}
+            />
           </div>
         </div>
 
-        {/* Enhanced Processing Status */}
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 space-y-3 z-30">
-          {processingState.isProcessing && (
+          {isProcessing && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <span className="text-sm font-medium text-blue-800">{processingState.stage}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="sm" onClick={pauseProcessing}>
-                    {processingState.isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={cancelProcessing}>
-                    <Square className="h-3 w-3" />
-                  </Button>
-                </div>
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span className="text-sm font-medium text-blue-800">{processingStage || "Processing..."}</span>
               </div>
-              <Progress value={processingState.progress} className="h-2 mb-2" />
-              <div className="flex justify-between text-xs text-blue-700">
-                <span>{processingState.processedCount}/{processingState.totalFiles} files</span>
-                {processingState.estimatedTimeRemaining && (
-                  <span>~{formatTime(processingState.estimatedTimeRemaining)} remaining</span>
-                )}
-              </div>
+              <Progress value={processingProgress} className="h-2" />
             </div>
           )}
 
@@ -1139,10 +697,10 @@ export default function BackgroundRemoverPage() {
             
             <Button 
               onClick={handleProcess}
-              disabled={processingState.isProcessing || files.length === 0}
+              disabled={isProcessing || files.length === 0}
               className="bg-purple-600 hover:bg-purple-700 text-white py-3"
             >
-              {processingState.isProcessing ? (
+              {isProcessing ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               ) : (
                 <>
@@ -1198,6 +756,14 @@ export default function BackgroundRemoverPage() {
                   </Button>
                 </div>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBefore(!showBefore)}
+              >
+                {showBefore ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showBefore ? "Hide Before" : "Show Before"}
+              </Button>
             </div>
           </div>
 
@@ -1205,67 +771,114 @@ export default function BackgroundRemoverPage() {
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-6 space-y-4 min-h-[calc(100vh-12rem)]">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {files.map((file) => (
-                    <Card key={file.id} className="relative group">
-                      <CardContent className="p-3">
-                        <div className="relative">
-                          <img
-                            src={file.processedPreview || file.preview}
-                            alt={file.name}
-                            className="w-full aspect-square object-cover border rounded transition-transform group-hover:scale-105"
-                            style={{ 
-                              transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
-                              transition: "transform 0.2s ease"
-                            }}
-                          />
-                          {file.processed && (
-                            <div className="absolute top-2 right-2">
-                              <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
+                {files.map((file) => (
+                  <Card key={file.id} className="relative">
+                    <CardContent className="p-6">
+                      <div className={`grid gap-6 ${showBefore ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {/* Before */}
+                        {showBefore && (
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-700 mb-3">Before</h3>
+                            <div className="relative">
+                              <img
+                                src={file.preview}
+                                alt="Original"
+                                className="w-full h-auto object-contain border border-gray-300 rounded-lg shadow-sm bg-white"
+                                style={{ 
+                                  transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
+                                  transition: "transform 0.2s ease"
+                                }}
+                              />
+                              <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                {file.dimensions?.width}×{file.dimensions?.height}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* After */}
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-700 mb-3">After</h3>
+                          {file.processedPreview ? (
+                            <div className="relative">
+                              <img
+                                src={file.processedPreview}
+                                alt="Background Removed"
+                                className="w-full h-auto object-contain border border-gray-300 rounded-lg shadow-sm"
+                                style={{ 
+                                  transform: `scale(${Math.min(zoomLevel / 100, 1)})`,
+                                  transition: "transform 0.2s ease",
+                                  backgroundImage: `url("data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3cdefs%3e%3cpattern id='a' patternUnits='userSpaceOnUse' width='20' height='20' patternTransform='scale(0.5) rotate(0)'%3e%3crect x='0' y='0' width='100%25' height='100%25' fill='%23f8f9fa'/%3e%3cpath d='m10 0v20M0 10h20' stroke-width='1' stroke='%23e9ecef' fill='none'/%3e%3c/pattern%3e%3c/defs%3e%3crect width='100%25' height='100%25' fill='url(%23a)'/%3e%3c/svg%3e")`,
+                                  backgroundSize: "20px 20px"
+                                }}
+                              />
+                              <div className="absolute top-2 right-2">
+                                <CheckCircle className="h-5 w-5 text-green-600 bg-white rounded-full" />
+                              </div>
+                              <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                {file.dimensions?.width}×{file.dimensions?.height}
+                              </div>
+                            </div>
+                          ) : file.error ? (
+                            <div className="aspect-video bg-red-50 border border-red-200 rounded-lg flex items-center justify-center">
+                              <div className="text-center text-red-600">
+                                <AlertCircle className="h-12 w-12 mx-auto mb-3" />
+                                <p className="text-sm font-medium">Processing Failed</p>
+                                <p className="text-xs mt-1">{file.error}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="aspect-video bg-gray-100 rounded-lg border flex items-center justify-center">
+                              <div className="text-center text-gray-500">
+                                <Scissors className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                <p className="text-sm">Background removed image will appear here</p>
+                              </div>
                             </div>
                           )}
-                          {file.error && (
-                            <div className="absolute top-2 right-2">
-                              <AlertCircle className="h-5 w-5 text-red-600 bg-white rounded-full" />
-                            </div>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeFile(file.id)}
-                            className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <span>Original: {formatFileSize(file.size)}</span>
+                            {file.processedSize && (
+                              <span className="text-green-600">Processed: {formatFileSize(file.processedSize)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
                           {file.processed && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => downloadFile(file)}
-                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
-                              <Download className="h-3 w-3" />
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
                             </Button>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFile(file.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <div className="mt-2 text-center">
-                          <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                          <div className="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>{formatFileSize(file.size)}</span>
-                            {file.processedSize && (
-                              <span className="text-green-600">→ {formatFileSize(file.processedSize)}</span>
-                            )}
-                          </div>
-                          {file.dimensions && (
-                            <p className="text-xs text-gray-400">{file.dimensions.width}×{file.dimensions.height}</p>
-                          )}
-                          {file.error && (
-                            <p className="text-xs text-red-600 mt-1 truncate">{file.error}</p>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {/* Canvas Ad */}
+                <div className="my-8">
+                  <AdBanner 
+                    adSlot="background-canvas-content"
+                    adFormat="horizontal"
+                    className="max-w-2xl mx-auto"
+                  />
                 </div>
               </div>
             </ScrollArea>
@@ -1285,69 +898,56 @@ export default function BackgroundRemoverPage() {
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-sm font-medium">Algorithm</Label>
-                    <Select value={algorithm} onValueChange={setAlgorithm}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">Auto (Recommended)</SelectItem>
-                        <SelectItem value="portrait">Portrait Mode</SelectItem>
-                        <SelectItem value="object">Object Mode</SelectItem>
-                        <SelectItem value="general">General Purpose</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {backgroundRemovalOptions.map((option) => (
+                  <div key={option.key} className="space-y-2">
+                    <Label className="text-sm font-medium">{option.label}</Label>
+                    
+                    {option.type === "select" && (
+                      <Select
+                        value={toolOptions[option.key]?.toString()}
+                        onValueChange={(value) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {option.selectOptions?.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
 
-                  <div>
-                    <Label className="text-sm font-medium">Sensitivity: {sensitivity[0]}</Label>
-                    <Slider
-                      value={sensitivity}
-                      onValueChange={setSensitivity}
-                      min={10}
-                      max={50}
-                      step={5}
-                      className="mt-2"
-                    />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>10</span>
-                      <span>50</span>
-                    </div>
-                  </div>
+                    {option.type === "slider" && (
+                      <div className="space-y-2">
+                        <Slider
+                          value={[toolOptions[option.key] || option.defaultValue]}
+                          onValueChange={([value]) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                          min={option.min}
+                          max={option.max}
+                          step={option.step}
+                        />
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>{option.min}</span>
+                          <span className="font-medium">{toolOptions[option.key] || option.defaultValue}</span>
+                          <span>{option.max}</span>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={featherEdges}
-                        onCheckedChange={setFeatherEdges}
-                      />
-                      <span className="text-sm">Feather Edges</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={preserveDetails}
-                        onCheckedChange={setPreserveDetails}
-                      />
-                      <span className="text-sm">Preserve Details</span>
-                    </div>
+                    {option.type === "checkbox" && (
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={toolOptions[option.key] || false}
+                          onCheckedChange={(checked) => setToolOptions(prev => ({ ...prev, [option.key]: checked }))}
+                        />
+                        <span className="text-sm">{option.label}</span>
+                      </div>
+                    )}
                   </div>
-
-                  <div>
-                    <Label className="text-sm font-medium">Output Format</Label>
-                    <Select value={outputFormat} onValueChange={setOutputFormat}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="png">PNG (Recommended)</SelectItem>
-                        <SelectItem value="webp">WebP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                ))}
 
                 {/* Processing Info */}
                 {files.length > 0 && (
@@ -1355,20 +955,20 @@ export default function BackgroundRemoverPage() {
                     <h4 className="text-sm font-semibold text-purple-800 mb-2">Processing Info</h4>
                     <div className="text-xs text-purple-700 space-y-1">
                       <div className="flex justify-between">
+                        <span>Algorithm:</span>
+                        <span className="font-medium">{toolOptions.algorithm}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Sensitivity:</span>
+                        <span className="font-medium">{toolOptions.sensitivity}</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span>Total Files:</span>
                         <span className="font-medium">{files.length}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Total Size:</span>
-                        <span className="font-medium">{formatFileSize(files.reduce((sum, f) => sum + f.size, 0))}</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span>Processed:</span>
                         <span className="font-medium">{files.filter(f => f.processed).length}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Algorithm:</span>
-                        <span className="font-medium">{algorithm.toUpperCase()}</span>
                       </div>
                     </div>
                   </div>
@@ -1376,7 +976,7 @@ export default function BackgroundRemoverPage() {
 
                 {/* Sidebar Ad */}
                 <AdBanner 
-                  adSlot="background-remover-sidebar"
+                  adSlot="background-sidebar"
                   adFormat="auto"
                   className="w-full"
                 />
@@ -1385,46 +985,26 @@ export default function BackgroundRemoverPage() {
           </div>
 
           <div className="p-6 border-t bg-gray-50 space-y-3 flex-shrink-0">
-            {/* Enhanced Processing Status */}
-            {processingState.isProcessing && (
+            {isProcessing && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                    <span className="text-sm font-medium text-blue-800">{processingState.stage}</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Button variant="outline" size="sm" onClick={pauseProcessing}>
-                      {processingState.isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={cancelProcessing}>
-                      <Square className="h-3 w-3" />
-                    </Button>
-                  </div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-sm font-medium text-blue-800">{processingStage || "Processing..."}</span>
                 </div>
-                <Progress value={processingState.progress} className="h-2 mb-2" />
-                <div className="flex justify-between text-xs text-blue-700">
-                  <span>{processingState.processedCount}/{processingState.totalFiles} files</span>
-                  {processingState.estimatedTimeRemaining && (
-                    <span>~{formatTime(processingState.estimatedTimeRemaining)} remaining</span>
-                  )}
-                </div>
-                {processingState.currentFile && (
-                  <p className="text-xs text-blue-600 mt-1 truncate">Processing: {processingState.currentFile}</p>
-                )}
+                <Progress value={processingProgress} className="h-2" />
               </div>
             )}
 
             <Button 
               onClick={handleProcess}
-              disabled={processingState.isProcessing || files.length === 0}
+              disabled={isProcessing || files.length === 0}
               className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-base font-semibold"
               size="lg"
             >
-              {processingState.isProcessing ? (
+              {isProcessing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {processingState.isPaused ? "Paused..." : "Processing..."}
+                  Processing...
                 </>
               ) : (
                 <>

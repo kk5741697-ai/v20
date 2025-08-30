@@ -163,13 +163,6 @@ export class PDFProcessor {
 
   static async mergePDFs(files: File[], options: PDFProcessingOptions = {}): Promise<Uint8Array> {
     try {
-        filename: `${files[0].name.replace(".pdf", "")}_images.zip`,
-        filename: `watermarked_${files[0].name}`,
-        filename: `compressed_${files[0].name}`,
-        filename: `unlocked_${files[0].name}`,
-        filename: `converted_${files[0].name.replace(".pdf", ".docx")}`,
-        filename: `organized_${files[0].name}`,
-        filename: `merged_${files[0].name}`,
       if (files.length < 2) {
         throw new Error("At least 2 PDF files are required for merging")
       }
@@ -782,12 +775,6 @@ export class PDFProcessor {
       pdf.setCreationDate(new Date())
 
       return await pdf.save({
-        filename: "pdf_to_images.zip",
-        filename: "watermarked_pdfs.zip",
-        filename: "compressed_pdfs.zip",
-        filename: "unlocked_pdfs.zip",
-        filename: "converted_documents.zip",
-        filename: "merged_pdfs.zip",
         useObjectStreams: false,
         addDefaultPage: false
       })

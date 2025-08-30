@@ -4,11 +4,6 @@ import { PDFToolsLayout } from "@/components/pdf-tools-layout"
 import { FileType } from "lucide-react"
 import { PDFProcessor } from "@/lib/processors/pdf-processor"
 
-export const metadata = {
-  title: "PDF Merger",
-  description: "Combine multiple PDF files into one document with custom page ordering and bookmark preservation."
-}
-
 const mergeOptions = [
   {
     key: "addBookmarks",

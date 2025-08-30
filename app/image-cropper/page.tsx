@@ -33,11 +33,6 @@ import { toast } from "@/hooks/use-toast"
 import { ImageProcessor } from "@/lib/processors/image-processor"
 import { AdBanner } from "@/components/ads/ad-banner"
 
-export const metadata = {
-  title: "Image Cropper",
-  description: "Crop images with precision using our visual editor and aspect ratio presets. Perfect for social media and web optimization."
-}
-
 interface CropArea {
   x: number
   y: number

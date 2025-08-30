@@ -22,7 +22,7 @@ const upscaleOptions = [
     key: "algorithm",
     label: "Upscaling Algorithm",
     type: "select" as const,
-    defaultValue: "bicubic",
+    defaultValue: "lanczos",
     selectOptions: [
       { value: "nearest", label: "Nearest Neighbor (Fast)" },
       { value: "bilinear", label: "Bilinear (Balanced)" },
@@ -42,14 +42,14 @@ const upscaleOptions = [
     key: "reduceNoise",
     label: "Reduce Noise",
     type: "checkbox" as const,
-    defaultValue: false,
+    defaultValue: true,
     section: "Enhancement",
   },
   {
     key: "sharpen",
     label: "Sharpening",
     type: "slider" as const,
-    defaultValue: 0,
+    defaultValue: 25,
     min: 0,
     max: 100,
     step: 5,
@@ -61,6 +61,16 @@ const upscaleOptions = [
     type: "checkbox" as const,
     defaultValue: true,
     section: "Enhancement",
+  },
+  {
+    key: "quality",
+    label: "Output Quality",
+    type: "slider" as const,
+    defaultValue: 98,
+    min: 80,
+    max: 100,
+    step: 1,
+    section: "Output",
   },
 ]
 

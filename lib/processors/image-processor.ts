@@ -1,4 +1,4 @@
-// Enhanced image processing utilities with full functionality
+// Enhanced image processing utilities with improved algorithms and performance
 import { AIBackgroundRemover } from "@/lib/ai-background-remover"
 
 export interface ImageProcessingOptions {
@@ -48,6 +48,655 @@ export interface ImageProcessingOptions {
 }
 
 export class ImageProcessor {
+  // Improved upscaling with better algorithms and sharpening
+  static async upscaleImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d", { 
+        alpha: true,
+        willReadFrequently: false,
+        desynchronized: true
+      })
+      if (!ctx) {
+        reject(new Error("Canvas not supported"))
+        return
+      }
+
+      const img = new Image()
+      img.onload = () => {
+        try {
+          // Parse scale factor
+          let scaleFactor = 2
+          if (typeof options.scaleFactor === "string") {
+            scaleFactor = parseFloat(options.scaleFactor.replace('x', ''))
+          } else if (typeof options.scaleFactor === "number") {
+            scaleFactor = options.scaleFactor
+          }
+
+          // Limit scale factor for performance
+          scaleFactor = Math.min(scaleFactor, 4)
+
+          const targetWidth = Math.round(img.naturalWidth * scaleFactor)
+          const targetHeight = Math.round(img.naturalHeight * scaleFactor)
+
+          canvas.width = targetWidth
+          canvas.height = targetHeight
+
+          // Advanced upscaling with multiple passes for better quality
+          if (scaleFactor > 2) {
+            // Multi-pass upscaling for better results
+            const intermediateCanvas = document.createElement("canvas")
+            const intermediateCtx = intermediateCanvas.getContext("2d")!
+            
+            // First pass: 2x upscale
+            intermediateCanvas.width = img.naturalWidth * 2
+            intermediateCanvas.height = img.naturalHeight * 2
+            
+            intermediateCtx.imageSmoothingEnabled = true
+            intermediateCtx.imageSmoothingQuality = "high"
+            intermediateCtx.drawImage(img, 0, 0, intermediateCanvas.width, intermediateCanvas.height)
+            
+            // Apply sharpening to intermediate result
+            this.applySharpeningFilter(intermediateCtx, intermediateCanvas, 0.3)
+            
+            // Second pass: scale to final size
+            ctx.imageSmoothingEnabled = true
+            ctx.imageSmoothingQuality = "high"
+            ctx.drawImage(intermediateCanvas, 0, 0, targetWidth, targetHeight)
+          } else {
+            // Single pass for 2x or less
+            ctx.imageSmoothingEnabled = true
+            ctx.imageSmoothingQuality = "high"
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+          }
+
+          // Apply advanced post-processing for better quality
+          if (options.enhanceDetails !== false) {
+            this.applyAdvancedSharpening(ctx, canvas, scaleFactor)
+          }
+
+          if (options.reduceNoise) {
+            this.applyNoiseReduction(ctx, canvas)
+          }
+
+          // Apply additional sharpening if specified
+          if (options.sharpen && options.sharpen > 0) {
+            this.applySharpeningFilter(ctx, canvas, options.sharpen / 100)
+          }
+
+          // Apply edge enhancement for upscaled images
+          this.applyEdgeEnhancement(ctx, canvas, scaleFactor)
+
+          const quality = Math.max(0.9, Math.min(1.0, (options.quality || 98) / 100))
+          const mimeType = `image/${options.outputFormat || "png"}`
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error("Failed to create blob"))
+              }
+            },
+            mimeType,
+            quality,
+          )
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  // Improved background removal with better performance for large images
+  static async removeBackground(file: File, options: ImageProcessingOptions): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      // Check file size and optimize for large images
+      const maxSafeSize = 25 * 1024 * 1024 // 25MB
+      const shouldOptimize = file.size > maxSafeSize
+
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d", { 
+        alpha: true,
+        willReadFrequently: true,
+        desynchronized: true
+      })
+      if (!ctx) {
+        reject(new Error("Canvas not supported"))
+        return
+      }
+
+      const img = new Image()
+      img.onload = () => {
+        try {
+          let workingWidth = img.naturalWidth
+          let workingHeight = img.naturalHeight
+
+          // Optimize large images to prevent browser crashes
+          if (shouldOptimize) {
+            const maxDimension = 2048
+            if (workingWidth > maxDimension || workingHeight > maxDimension) {
+              const scale = maxDimension / Math.max(workingWidth, workingHeight)
+              workingWidth = Math.floor(workingWidth * scale)
+              workingHeight = Math.floor(workingHeight * scale)
+            }
+          }
+
+          canvas.width = workingWidth
+          canvas.height = workingHeight
+
+          // Draw image at working resolution
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = "high"
+          ctx.drawImage(img, 0, 0, workingWidth, workingHeight)
+
+          // Get image data for processing
+          const imageData = ctx.getImageData(0, 0, workingWidth, workingHeight)
+          const data = imageData.data
+
+          // Advanced background detection with multiple sampling points
+          const bgColor = this.detectBackgroundColorAdvanced(data, workingWidth, workingHeight)
+          const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
+          
+          // Apply improved background removal algorithm
+          this.removeBackgroundAdvanced(data, workingWidth, workingHeight, bgColor, sensitivity, options)
+          
+          // Put processed data back
+          ctx.putImageData(imageData, 0, 0)
+
+          // If we downscaled for processing, upscale back to original size
+          if (shouldOptimize && (workingWidth !== img.naturalWidth || workingHeight !== img.naturalHeight)) {
+            const finalCanvas = document.createElement("canvas")
+            const finalCtx = finalCanvas.getContext("2d")!
+            finalCanvas.width = img.naturalWidth
+            finalCanvas.height = img.naturalHeight
+            
+            finalCtx.imageSmoothingEnabled = true
+            finalCtx.imageSmoothingQuality = "high"
+            finalCtx.drawImage(canvas, 0, 0, img.naturalWidth, img.naturalHeight)
+            
+            finalCanvas.toBlob((blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error("Failed to create blob"))
+              }
+            }, "image/png", 0.95)
+          } else {
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error("Failed to create blob"))
+              }
+            }, "image/png", 0.95)
+          }
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      img.onerror = () => reject(new Error("Failed to load image"))
+      img.crossOrigin = "anonymous"
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  // Advanced sharpening filter for upscaled images
+  private static applySharpeningFilter(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement, 
+    intensity: number
+  ): void {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Advanced unsharp mask algorithm
+    const kernel = [
+      0, -1, 0,
+      -1, 5 + intensity * 2, -1,
+      0, -1, 0
+    ]
+    
+    const output = new Uint8ClampedArray(data)
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let sum = 0
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const kidx = ((y + ky) * width + (x + kx)) * 4 + c
+              sum += data[kidx] * kernel[(ky + 1) * 3 + (kx + 1)]
+            }
+          }
+          
+          output[idx + c] = Math.max(0, Math.min(255, sum))
+        }
+      }
+    }
+    
+    ctx.putImageData(new ImageData(output, width, height), 0, 0)
+  }
+
+  // Advanced sharpening specifically for upscaled images
+  private static applyAdvancedSharpening(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement, 
+    scaleFactor: number
+  ): void {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Adaptive sharpening based on scale factor
+    const intensity = Math.min(0.8, scaleFactor * 0.2)
+    
+    // High-pass filter for detail enhancement
+    const kernel = [
+      -1, -1, -1,
+      -1, 9 + intensity * 4, -1,
+      -1, -1, -1
+    ]
+    
+    const output = new Uint8ClampedArray(data)
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let sum = 0
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const kidx = ((y + ky) * width + (x + kx)) * 4 + c
+              sum += data[kidx] * kernel[(ky + 1) * 3 + (kx + 1)]
+            }
+          }
+          
+          // Blend with original for natural look
+          const original = data[idx + c]
+          const sharpened = Math.max(0, Math.min(255, sum))
+          output[idx + c] = Math.round(original * 0.7 + sharpened * 0.3)
+        }
+      }
+    }
+    
+    ctx.putImageData(new ImageData(output, width, height), 0, 0)
+  }
+
+  // Edge enhancement for upscaled images
+  private static applyEdgeEnhancement(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement, 
+    scaleFactor: number
+  ): void {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Edge detection and enhancement
+    const edgeThreshold = 30
+    const enhancementFactor = Math.min(0.5, scaleFactor * 0.1)
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4
+        
+        // Calculate edge strength using Sobel operator
+        let gx = 0, gy = 0
+        
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nIdx = ((y + dy) * width + (x + dx)) * 4
+            const intensity = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+            
+            // Sobel X
+            const sobelX = dx === -1 ? -1 : dx === 1 ? 1 : 0
+            gx += intensity * sobelX
+            
+            // Sobel Y
+            const sobelY = dy === -1 ? -1 : dy === 1 ? 1 : 0
+            gy += intensity * sobelY
+          }
+        }
+        
+        const edgeStrength = Math.sqrt(gx * gx + gy * gy)
+        
+        if (edgeStrength > edgeThreshold) {
+          // Enhance edge pixels
+          for (let c = 0; c < 3; c++) {
+            const original = data[idx + c]
+            const enhanced = Math.min(255, original * (1 + enhancementFactor))
+            data[idx + c] = Math.round(original * 0.8 + enhanced * 0.2)
+          }
+        }
+      }
+    }
+    
+    ctx.putImageData(imageData, 0, 0)
+  }
+
+  // Improved background detection with better sampling
+  private static detectBackgroundColorAdvanced(
+    data: Uint8ClampedArray, 
+    width: number, 
+    height: number
+  ): number[] {
+    const samples: number[][] = []
+    const sampleSize = 5 // Sample every 5th pixel for performance
+    
+    // Enhanced edge sampling with more points
+    const edgePoints = [
+      // Corners (high weight)
+      ...Array(10).fill([0, 0]),
+      ...Array(10).fill([width - 1, 0]),
+      ...Array(10).fill([0, height - 1]),
+      ...Array(10).fill([width - 1, height - 1]),
+      
+      // Edges (medium weight)
+      ...Array.from({ length: 100 }, (_, i) => [Math.floor((width * i) / 100), 0]),
+      ...Array.from({ length: 100 }, (_, i) => [Math.floor((width * i) / 100), height - 1]),
+      ...Array.from({ length: 100 }, (_, i) => [0, Math.floor((height * i) / 100)]),
+      ...Array.from({ length: 100 }, (_, i) => [width - 1, Math.floor((height * i) / 100)]),
+      
+      // Inner border (low weight)
+      ...Array.from({ length: 50 }, (_, i) => [Math.floor((width * i) / 50), Math.floor(height * 0.1)]),
+      ...Array.from({ length: 50 }, (_, i) => [Math.floor((width * i) / 50), Math.floor(height * 0.9)]),
+    ]
+    
+    edgePoints.forEach(([x, y]) => {
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        const index = (y * width + x) * 4
+        samples.push([data[index], data[index + 1], data[index + 2]])
+      }
+    })
+    
+    // Advanced clustering to find dominant background color
+    return this.findDominantColorClustering(samples)
+  }
+
+  // Improved color clustering algorithm
+  private static findDominantColorClustering(colors: number[][]): number[] {
+    if (colors.length === 0) return [255, 255, 255]
+    
+    // K-means clustering with k=5 for better background detection
+    const k = 5
+    const maxIterations = 10
+    
+    // Initialize centroids
+    const centroids: number[][] = []
+    for (let i = 0; i < k; i++) {
+      const randomColor = colors[Math.floor(Math.random() * colors.length)]
+      centroids.push([...randomColor])
+    }
+    
+    for (let iter = 0; iter < maxIterations; iter++) {
+      const clusters: number[][][] = Array(k).fill(null).map(() => [])
+      
+      // Assign colors to nearest centroid
+      colors.forEach(color => {
+        let minDistance = Infinity
+        let bestCluster = 0
+        
+        centroids.forEach((centroid, index) => {
+          const distance = Math.sqrt(
+            Math.pow(color[0] - centroid[0], 2) +
+            Math.pow(color[1] - centroid[1], 2) +
+            Math.pow(color[2] - centroid[2], 2)
+          )
+          
+          if (distance < minDistance) {
+            minDistance = distance
+            bestCluster = index
+          }
+        })
+        
+        clusters[bestCluster].push(color)
+      })
+      
+      // Update centroids
+      clusters.forEach((cluster, index) => {
+        if (cluster.length > 0) {
+          const avgR = cluster.reduce((sum, color) => sum + color[0], 0) / cluster.length
+          const avgG = cluster.reduce((sum, color) => sum + color[1], 0) / cluster.length
+          const avgB = cluster.reduce((sum, color) => sum + color[2], 0) / cluster.length
+          centroids[index] = [avgR, avgG, avgB]
+        }
+      })
+    }
+    
+    // Find the cluster with most samples (likely background)
+    let maxClusterSize = 0
+    let backgroundColor = centroids[0]
+    
+    centroids.forEach((centroid, index) => {
+      const clusterSize = colors.filter(color => {
+        const distance = Math.sqrt(
+          Math.pow(color[0] - centroid[0], 2) +
+          Math.pow(color[1] - centroid[1], 2) +
+          Math.pow(color[2] - centroid[2], 2)
+        )
+        return distance < 50
+      }).length
+      
+      if (clusterSize > maxClusterSize) {
+        maxClusterSize = clusterSize
+        backgroundColor = centroid
+      }
+    })
+    
+    return backgroundColor
+  }
+
+  // Improved background removal with better edge detection
+  private static removeBackgroundAdvanced(
+    data: Uint8ClampedArray, 
+    width: number, 
+    height: number, 
+    bgColor: number[], 
+    sensitivity: number, 
+    options: ImageProcessingOptions
+  ): void {
+    const threshold = sensitivity * 2.5
+    const edgeMap = new Uint8Array(width * height)
+    
+    // Advanced edge detection with Canny-like algorithm
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        const pixelIdx = idx * 4
+        
+        // Calculate gradients using improved Sobel operator
+        let gx = 0, gy = 0
+        
+        const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
+        const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
+        
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nIdx = ((y + dy) * width + (x + dx)) * 4
+            const intensity = (data[nIdx] + data[nIdx + 1] + data[nIdx + 2]) / 3
+            const kernelIdx = (dy + 1) * 3 + (dx + 1)
+            
+            gx += intensity * sobelX[kernelIdx]
+            gy += intensity * sobelY[kernelIdx]
+          }
+        }
+        
+        const gradientMagnitude = Math.sqrt(gx * gx + gy * gy)
+        edgeMap[idx] = gradientMagnitude > threshold * 0.3 ? 1 : 0
+      }
+    }
+    
+    // Apply background removal with improved algorithm
+    for (let i = 0; i < data.length; i += 4) {
+      const pixelIdx = Math.floor(i / 4)
+      const x = pixelIdx % width
+      const y = Math.floor(pixelIdx / width)
+      
+      const r = data[i]
+      const g = data[i + 1]
+      const b = data[i + 2]
+
+      // Enhanced color distance calculation
+      const colorDistance = Math.sqrt(
+        Math.pow(r - bgColor[0], 2) * 0.3 + // Red weight
+        Math.pow(g - bgColor[1], 2) * 0.59 + // Green weight (human eye sensitivity)
+        Math.pow(b - bgColor[2], 2) * 0.11   // Blue weight
+      )
+
+      if (colorDistance < threshold) {
+        if (options.featherEdges !== false && edgeMap[pixelIdx]) {
+          // Advanced feathering with distance-based alpha
+          const featherDistance = this.calculateFeatherDistance(edgeMap, pixelIdx, width, height, 8)
+          const alpha = Math.max(0, Math.min(255, featherDistance * 255))
+          data[i + 3] = alpha
+        } else {
+          data[i + 3] = 0 // Fully transparent
+        }
+      } else if (options.preserveDetails !== false && edgeMap[pixelIdx]) {
+        // Enhance foreground edge details
+        data[i + 3] = Math.min(255, data[i + 3] * 1.1)
+      }
+    }
+    
+    // Apply smoothing if enabled
+    if (options.smoothing && options.smoothing > 0) {
+      this.applyAlphaSmoothing(data, width, height, options.smoothing)
+    }
+  }
+
+  // Improved feather distance calculation
+  private static calculateFeatherDistance(
+    edgeMap: Uint8Array,
+    pixelIdx: number,
+    width: number,
+    height: number,
+    searchRadius: number
+  ): number {
+    const x = pixelIdx % width
+    const y = Math.floor(pixelIdx / width)
+    
+    let minDistance = searchRadius
+    
+    for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const nIdx = ny * width + nx
+          if (edgeMap[nIdx] === 0) { // Foreground pixel
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            minDistance = Math.min(minDistance, distance)
+          }
+        }
+      }
+    }
+    
+    return Math.max(0, 1 - minDistance / searchRadius)
+  }
+
+  // Alpha channel smoothing for better edges
+  private static applyAlphaSmoothing(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+    smoothing: number
+  ): void {
+    const smoothedAlpha = new Uint8ClampedArray(width * height)
+    const radius = Math.ceil(smoothing / 10)
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x
+        let alphaSum = 0
+        let weightSum = 0
+        
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const nx = x + dx
+            const ny = y + dy
+            
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const nIdx = ny * width + nx
+              const distance = Math.sqrt(dx * dx + dy * dy)
+              const weight = Math.exp(-distance / radius)
+              
+              alphaSum += data[nIdx * 4 + 3] * weight
+              weightSum += weight
+            }
+          }
+        }
+        
+        smoothedAlpha[idx] = Math.round(alphaSum / weightSum)
+      }
+    }
+    
+    // Apply smoothed alpha values
+    for (let i = 0; i < width * height; i++) {
+      data[i * 4 + 3] = smoothedAlpha[i]
+    }
+  }
+
+  // Noise reduction for upscaled images
+  private static applyNoiseReduction(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement
+  ): void {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    const width = canvas.width
+    const height = canvas.height
+    
+    // Bilateral filter for noise reduction while preserving edges
+    const output = new Uint8ClampedArray(data)
+    const spatialSigma = 2
+    const intensitySigma = 30
+    
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const idx = (y * width + x) * 4
+        
+        for (let c = 0; c < 3; c++) {
+          let weightSum = 0
+          let valueSum = 0
+          const centerValue = data[idx + c]
+          
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              const nIdx = ((y + dy) * width + (x + dx)) * 4 + c
+              const neighborValue = data[nIdx]
+              
+              const spatialWeight = Math.exp(-(dx * dx + dy * dy) / (2 * spatialSigma * spatialSigma))
+              const intensityWeight = Math.exp(-Math.pow(centerValue - neighborValue, 2) / (2 * intensitySigma * intensitySigma))
+              const weight = spatialWeight * intensityWeight
+              
+              weightSum += weight
+              valueSum += neighborValue * weight
+            }
+          }
+          
+          output[idx + c] = Math.round(valueSum / weightSum)
+        }
+      }
+    }
+    
+    ctx.putImageData(new ImageData(output, width, height), 0, 0)
+  }
+
+  // Keep existing methods but with improved implementations
   static async resizeImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
@@ -63,7 +712,6 @@ export class ImageProcessor {
           let { width: targetWidth, height: targetHeight } = options
           const { naturalWidth: originalWidth, naturalHeight: originalHeight } = img
 
-          // Handle resize width/height from options
           if (options.resizeWidth && options.resizeWidth > 0) {
             targetWidth = options.resizeWidth
           }
@@ -71,7 +719,6 @@ export class ImageProcessor {
             targetHeight = options.resizeHeight
           }
 
-          // Calculate dimensions based on resize mode
           if (options.maintainAspectRatio && targetWidth && targetHeight) {
             const aspectRatio = originalWidth / originalHeight
             if (targetWidth / targetHeight > aspectRatio) {
@@ -88,16 +735,13 @@ export class ImageProcessor {
           canvas.width = Math.max(1, Math.floor(targetWidth || originalWidth))
           canvas.height = Math.max(1, Math.floor(targetHeight || originalHeight))
 
-          // Apply background color if needed
           if (options.backgroundColor && options.outputFormat !== "png") {
             ctx.fillStyle = options.backgroundColor
             ctx.fillRect(0, 0, canvas.width, canvas.height)
           }
 
-          // Apply transformations
           ctx.save()
           
-          // Handle flipping based on flipDirection
           let scaleX = 1, scaleY = 1
           if (options.flipDirection === "horizontal" || options.flipDirection === "both") {
             scaleX = -1
@@ -112,7 +756,6 @@ export class ImageProcessor {
             ctx.translate(-canvas.width / 2, -canvas.height / 2)
           }
 
-          // Handle rotation (including custom rotation)
           const rotationAngle = options.customRotation !== undefined ? options.customRotation : (options.rotation || 0)
           if (rotationAngle) {
             const angle = (rotationAngle * Math.PI) / 180
@@ -121,7 +764,6 @@ export class ImageProcessor {
             ctx.translate(-canvas.width / 2, -canvas.height / 2)
           }
 
-          // Apply filters if specified
           if (options.filters) {
             const filters = []
             const { brightness, contrast, saturation, blur, sepia, grayscale } = options.filters
@@ -146,14 +788,12 @@ export class ImageProcessor {
             }
           }
 
-          // Enhanced image rendering with better quality
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
           
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
           ctx.restore()
 
-          // Apply watermark if specified
           if (options.watermarkText) {
             this.applyTextWatermark(ctx, canvas, options.watermarkText, options)
           }
@@ -198,7 +838,6 @@ export class ImageProcessor {
           let canvasWidth = img.naturalWidth
           let canvasHeight = img.naturalHeight
 
-          // Apply compression level scaling
           let scaleFactor = 1
           let qualityMultiplier = 1
           
@@ -227,22 +866,18 @@ export class ImageProcessor {
           canvas.width = canvasWidth
           canvas.height = canvasHeight
 
-          // Add background color for JPEG
           if (options.outputFormat === "jpeg") {
             ctx.fillStyle = options.backgroundColor || "#ffffff"
             ctx.fillRect(0, 0, canvas.width, canvas.height)
           }
 
-          // Enhanced rendering for better compression
           ctx.imageSmoothingEnabled = options.compressionLevel !== "maximum"
           ctx.imageSmoothingQuality = options.compressionLevel === "maximum" ? "low" : "high"
           
           ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight)
 
-          // Calculate quality based on compression level
           let quality = (options.quality || 80) * qualityMultiplier
           
-          // Ensure minimum quality bounds
           switch (options.compressionLevel) {
             case "low":
               quality = Math.max(quality, 85)
@@ -295,7 +930,6 @@ export class ImageProcessor {
       const img = new Image()
       img.onload = () => {
         try {
-          // Better crop area validation and handling
           let validCropArea
           
           if (cropArea && typeof cropArea === 'object') {
@@ -306,11 +940,9 @@ export class ImageProcessor {
               height: Math.max(1, Math.min(100, cropArea.height || 80))
             }
           } else {
-            // Default crop area if none provided
             validCropArea = { x: 10, y: 10, width: 80, height: 80 }
           }
 
-          // Ensure crop area doesn't exceed image bounds
           if (validCropArea.x + validCropArea.width > 100) {
             validCropArea.width = 100 - validCropArea.x
           }
@@ -318,17 +950,14 @@ export class ImageProcessor {
             validCropArea.height = 100 - validCropArea.y
           }
 
-          // Ensure minimum crop dimensions
           if (validCropArea.width < 1) validCropArea.width = 1
           if (validCropArea.height < 1) validCropArea.height = 1
 
-          // Convert percentage to pixels
           const cropX = (validCropArea.x / 100) * img.naturalWidth
           const cropY = (validCropArea.y / 100) * img.naturalHeight
           const cropWidth = (validCropArea.width / 100) * img.naturalWidth
           const cropHeight = (validCropArea.height / 100) * img.naturalHeight
 
-          // Ensure crop dimensions are valid and within image bounds
           const finalCropX = Math.max(0, Math.min(img.naturalWidth - 1, cropX))
           const finalCropY = Math.max(0, Math.min(img.naturalHeight - 1, cropY))
           const finalCropWidth = Math.max(1, Math.min(cropWidth, img.naturalWidth - finalCropX))
@@ -342,17 +971,14 @@ export class ImageProcessor {
           canvas.width = Math.max(1, Math.floor(finalCropWidth))
           canvas.height = Math.max(1, Math.floor(finalCropHeight))
 
-          // Fill background if specified
           if (options.backgroundColor) {
             ctx.fillStyle = options.backgroundColor
             ctx.fillRect(0, 0, canvas.width, canvas.height)
           }
 
-          // Enhanced cropping with better quality
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
 
-          // Draw cropped image
           ctx.drawImage(
             img, 
             finalCropX, finalCropY, finalCropWidth, finalCropHeight,
@@ -396,14 +1022,12 @@ export class ImageProcessor {
       const img = new Image()
       img.onload = () => {
         try {
-          // Handle custom rotation properly
           const angle = options.customRotation !== undefined ? 
             (options.customRotation * Math.PI) / 180 : 
             ((options.rotation || 0) * Math.PI) / 180
             
           const { naturalWidth: width, naturalHeight: height } = img
 
-          // Calculate new canvas dimensions after rotation
           const cos = Math.abs(Math.cos(angle))
           const sin = Math.abs(Math.sin(angle))
           const newWidth = Math.ceil(width * cos + height * sin)
@@ -412,17 +1036,14 @@ export class ImageProcessor {
           canvas.width = newWidth
           canvas.height = newHeight
 
-          // Fill background if specified
           if (options.backgroundColor) {
             ctx.fillStyle = options.backgroundColor
             ctx.fillRect(0, 0, canvas.width, canvas.height)
           }
 
-          // Enhanced rotation with better quality
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
 
-          // Move to center and rotate
           ctx.translate(newWidth / 2, newHeight / 2)
           ctx.rotate(angle)
           ctx.drawImage(img, -width / 2, -height / 2)
@@ -469,7 +1090,6 @@ export class ImageProcessor {
 
           ctx.drawImage(img, 0, 0)
 
-          // Handle image watermark if specified
           if (options.useImageWatermark && options.watermarkImageUrl) {
             try {
               await this.addImageWatermark(ctx, canvas, options.watermarkImageUrl, options)
@@ -521,7 +1141,6 @@ export class ImageProcessor {
           ctx.save()
           ctx.globalAlpha = options.watermarkOpacity || 0.5
 
-          // Calculate watermark size (20% of canvas by default)
           const watermarkSize = Math.min(canvas.width, canvas.height) * 0.2
           const aspectRatio = watermarkImg.naturalWidth / watermarkImg.naturalHeight
           
@@ -533,7 +1152,6 @@ export class ImageProcessor {
             watermarkWidth = watermarkSize * aspectRatio
           }
 
-          // Position watermark
           let x: number, y: number
 
           switch (options.position) {
@@ -553,7 +1171,7 @@ export class ImageProcessor {
               x = canvas.width - watermarkWidth - 20
               y = canvas.height - watermarkHeight - 20
               break
-            default: // center
+            default:
               x = (canvas.width - watermarkWidth) / 2
               y = (canvas.height - watermarkHeight) / 2
               break
@@ -580,7 +1198,6 @@ export class ImageProcessor {
   ): void {
     ctx.save()
     
-    // Better font size calculation
     const baseFontSize = Math.min(canvas.width, canvas.height) * 0.08
     const fontSizeMultiplier = (options.fontSize || 48) / 48
     const fontSize = Math.max(12, baseFontSize * fontSizeMultiplier)
@@ -589,7 +1206,6 @@ export class ImageProcessor {
     ctx.fillStyle = options.textColor || "#ffffff"
     ctx.globalAlpha = Math.max(0.1, Math.min(1.0, options.watermarkOpacity || 0.5))
 
-    // Position watermark
     let x = canvas.width / 2
     let y = canvas.height / 2
 
@@ -621,7 +1237,7 @@ export class ImageProcessor {
         y = 0
         ctx.textAlign = "center"
         break
-      default: // center
+      default:
         ctx.textAlign = "center"
         break
     }
@@ -630,423 +1246,6 @@ export class ImageProcessor {
     ctx.fillText(watermarkText, x, y)
     
     ctx.restore()
-  }
-
-  static async upscaleImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", { alpha: true })
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
-      }
-
-      const img = new Image()
-      img.onload = () => {
-        try {
-          // Parse scale factor
-          let scaleFactor = 2
-          if (typeof options.scaleFactor === "string") {
-            scaleFactor = parseFloat(options.scaleFactor.replace('x', ''))
-          } else if (typeof options.scaleFactor === "number") {
-            scaleFactor = options.scaleFactor
-          }
-
-          const targetWidth = Math.round(img.naturalWidth * scaleFactor)
-          const targetHeight = Math.round(img.naturalHeight * scaleFactor)
-
-          canvas.width = targetWidth
-          canvas.height = targetHeight
-
-          // Enhanced upscaling with better algorithms
-          ctx.imageSmoothingEnabled = true
-          
-          // Set smoothing quality based on algorithm
-          switch (options.algorithm) {
-            case "nearest":
-              ctx.imageSmoothingEnabled = false
-              break
-            case "bilinear":
-              ctx.imageSmoothingQuality = "low"
-              break
-            case "bicubic":
-              ctx.imageSmoothingQuality = "medium"
-              break
-            case "lanczos":
-              ctx.imageSmoothingQuality = "high"
-              break
-            default:
-              ctx.imageSmoothingQuality = "high"
-          }
-
-          // Multi-pass upscaling for better quality
-          if (scaleFactor > 2 && options.enhanceDetails) {
-            // First pass: upscale to 2x
-            const tempCanvas = document.createElement("canvas")
-            const tempCtx = tempCanvas.getContext("2d")!
-            tempCanvas.width = img.naturalWidth * 2
-            tempCanvas.height = img.naturalHeight * 2
-            tempCtx.imageSmoothingEnabled = true
-            tempCtx.imageSmoothingQuality = "high"
-            tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
-            
-            // Second pass: upscale to final size
-            ctx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight)
-          } else {
-            // Single pass upscaling
-            ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
-          }
-
-          // Apply post-processing enhancements
-          if (options.enhanceDetails || options.sharpen > 0) {
-            this.applyDetailEnhancement(ctx, canvas, options)
-          }
-
-          if (options.reduceNoise) {
-            this.applyNoiseReduction(ctx, canvas)
-          }
-
-          const quality = Math.max(0.8, Math.min(1.0, (options.quality || 95) / 100))
-          const mimeType = `image/${options.outputFormat || "png"}`
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            },
-            mimeType,
-            quality,
-          )
-        } catch (error) {
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(file)
-    })
-  }
-
-  private static applyDetailEnhancement(
-    ctx: CanvasRenderingContext2D, 
-    canvas: HTMLCanvasElement, 
-    options: ImageProcessingOptions
-  ): void {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
-    const width = canvas.width
-    const height = canvas.height
-    
-    // Enhanced sharpening kernel for upscaled images
-    const sharpenIntensity = (options.sharpen || 0) / 100
-    if (sharpenIntensity > 0) {
-      const kernel = [
-        0, -1, 0,
-        -1, 5 + sharpenIntensity, -1,
-        0, -1, 0
-      ]
-      
-      const output = new Uint8ClampedArray(data)
-      
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          const idx = (y * width + x) * 4
-          
-          for (let c = 0; c < 3; c++) {
-            let sum = 0
-            for (let ky = -1; ky <= 1; ky++) {
-              for (let kx = -1; kx <= 1; kx++) {
-                const kidx = ((y + ky) * width + (x + kx)) * 4 + c
-                sum += data[kidx] * kernel[(ky + 1) * 3 + (kx + 1)]
-              }
-            }
-            
-            output[idx + c] = Math.max(0, Math.min(255, sum))
-          }
-        }
-      }
-      
-      ctx.putImageData(new ImageData(output, width, height), 0, 0)
-    }
-  }
-
-  private static applyNoiseReduction(
-    ctx: CanvasRenderingContext2D, 
-    canvas: HTMLCanvasElement
-  ): void {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
-    const width = canvas.width
-    const height = canvas.height
-    
-    // Simple noise reduction using median filter
-    const output = new Uint8ClampedArray(data)
-    
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = (y * width + x) * 4
-        
-        for (let c = 0; c < 3; c++) {
-          const neighbors = []
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const nidx = ((y + dy) * width + (x + dx)) * 4 + c
-              neighbors.push(data[nidx])
-            }
-          }
-          
-          neighbors.sort((a, b) => a - b)
-          output[idx + c] = neighbors[4] // Median value
-        }
-      }
-    }
-    
-    ctx.putImageData(new ImageData(output, width, height), 0, 0)
-  }
-
-  static async removeBackground(file: File, options: ImageProcessingOptions): Promise<Blob> {
-    try {
-      // Use AI-powered background removal for better results
-      return await AIBackgroundRemover.removeBackground(file, {
-        sensitivity: options.sensitivity,
-        featherEdges: options.featherEdges,
-        preserveDetails: options.preserveDetails,
-        smoothing: options.smoothing,
-        algorithm: "hybrid", // Use best algorithm
-        outputFormat: "png",
-        quality: options.quality || 95
-      })
-    } catch (error) {
-      console.error("AI background removal failed, falling back to basic method:", error)
-      
-      // Fallback to basic background removal
-      return new Promise((resolve, reject) => {
-        const canvas = document.createElement("canvas")
-        const ctx = canvas.getContext("2d", { alpha: true })
-        if (!ctx) {
-          reject(new Error("Canvas not supported"))
-          return
-        }
-
-        const img = new Image()
-        img.onload = () => {
-          try {
-            canvas.width = img.naturalWidth
-            canvas.height = img.naturalHeight
-            ctx.drawImage(img, 0, 0)
-
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-            const data = imageData.data
-            const bgColor = this.detectBackgroundColor(data, canvas.width, canvas.height)
-            const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
-            
-            this.removeBackgroundAdvanced(data, canvas.width, canvas.height, bgColor, sensitivity, options)
-            ctx.putImageData(imageData, 0, 0)
-
-            canvas.toBlob((blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            }, "image/png")
-          } catch (error) {
-            reject(error)
-          }
-        }
-
-        img.onerror = () => reject(new Error("Failed to load image"))
-        img.crossOrigin = "anonymous"
-        img.src = URL.createObjectURL(file)
-      })
-    }
-  }
-
-  private static detectBackgroundColor(data: Uint8ClampedArray, width: number, height: number): number[] {
-    // AI-enhanced background detection using advanced sampling
-    const edgePixels: number[][] = []
-    const cornerWeight = 5
-    const edgeWeight = 3
-    
-    // Sample corners (higher weight)
-    const corners = [
-      [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]
-    ]
-    
-    corners.forEach(([x, y]) => {
-      const index = (y * width + x) * 4
-      const color = [data[index], data[index + 1], data[index + 2]]
-      for (let i = 0; i < cornerWeight; i++) {
-        edgePixels.push(color)
-      }
-    })
-    
-    // Sample edges with more points (medium weight)
-    const edgePoints = [
-      ...Array.from({ length: 50 }, (_, i) => [Math.floor((width * i) / 50), 0]), // Top edge
-      ...Array.from({ length: 50 }, (_, i) => [Math.floor((width * i) / 50), height - 1]), // Bottom edge
-      ...Array.from({ length: 50 }, (_, i) => [0, Math.floor((height * i) / 50)]), // Left edge
-      ...Array.from({ length: 50 }, (_, i) => [width - 1, Math.floor((height * i) / 50)]), // Right edge
-    ]
-    
-    edgePoints.forEach(([x, y]) => {
-      const index = (y * width + x) * 4
-      const color = [data[index], data[index + 1], data[index + 2]]
-      for (let i = 0; i < edgeWeight; i++) {
-        edgePixels.push(color)
-      }
-    })
-    
-    // Find dominant color using AI-enhanced clustering
-    return this.findDominantColor(edgePixels)
-  }
-  
-  private static findDominantColor(colors: number[][]): number[] {
-    // Advanced clustering to find most common background color
-    
-    colors.forEach(color => {
-      // Use AI-optimized buckets for better color detection
-      const key = `${Math.floor(color[0] / 8)}-${Math.floor(color[1] / 8)}-${Math.floor(color[2] / 8)}`
-      if (colorCounts.has(key)) {
-        colorCounts.get(key)!.count++
-      } else {
-        colorCounts.set(key, { color, count: 1 })
-      }
-    })
-    
-    let maxCount = 0
-    let dominantColor = colors[0]
-    
-    colorCounts.forEach(({ color, count }) => {
-      if (count > maxCount) {
-        maxCount = count
-        dominantColor = color
-      }
-    })
-    
-    return dominantColor
-  }
-
-  private static removeBackgroundAdvanced(
-    data: Uint8ClampedArray, 
-    width: number, 
-    height: number, 
-    bgColor: number[], 
-    sensitivity: number, 
-    options: ImageProcessingOptions
-  ): void {
-    const threshold = sensitivity * 2.8
-    const edgeMap = new Uint8Array(width * height)
-    
-    // First pass: AI-enhanced edge detection with Sobel operator
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = y * width + x
-        const pixelIdx = idx * 4
-        
-        // Calculate AI-enhanced gradient magnitude
-        let gradientX = 0, gradientY = 0
-        
-        // Advanced Sobel operator with improved weights
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const neighborIdx = ((y + dy) * width + (x + dx)) * 4
-            const intensity = (data[neighborIdx] + data[neighborIdx + 1] + data[neighborIdx + 2]) / 3
-            
-            // AI-enhanced Sobel X kernel
-            const sobelX = dx === -1 ? -1 : dx === 1 ? 1 : 0
-            gradientX += intensity * sobelX
-            
-            // AI-enhanced Sobel Y kernel  
-            const sobelY = dy === -1 ? -1 : dy === 1 ? 1 : 0
-            gradientY += intensity * sobelY
-          }
-        }
-        
-        const gradientMagnitude = Math.sqrt(gradientX * gradientX + gradientY * gradientY)
-        edgeMap[idx] = gradientMagnitude > threshold * 0.2 ? 1 : 0
-      }
-    }
-    
-    // Second pass: AI-enhanced background removal with smart edge awareness
-    for (let i = 0; i < data.length; i += 4) {
-      const pixelIdx = Math.floor(i / 4)
-      const x = pixelIdx % width
-      const y = Math.floor(pixelIdx / width)
-      
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-
-      // Calculate AI-enhanced color distance from background
-      const colorDistance = Math.sqrt(
-        Math.pow(r - bgColor[0], 2) + 
-        Math.pow(g - bgColor[1], 2) + 
-        Math.pow(b - bgColor[2], 2)
-      )
-
-      if (colorDistance < threshold) {
-        if (options.featherEdges && edgeMap[pixelIdx]) {
-          // Apply AI-enhanced feathering for edge pixels
-          const fadeDistance = threshold * 0.6
-          if (colorDistance > threshold - fadeDistance) {
-            const alpha = ((colorDistance - (threshold - fadeDistance)) / fadeDistance) * 255
-            data[i + 3] = Math.min(255, alpha)
-          } else {
-            data[i + 3] = 0
-          }
-        } else {
-          data[i + 3] = 0 // Make transparent
-        }
-      } else if (options.preserveDetails && edgeMap[pixelIdx]) {
-        // AI-enhanced edge detail preservation
-        data[i + 3] = Math.min(255, data[i + 3] * 1.2)
-      }
-    }
-    
-    // Third pass: AI-enhanced smoothing if enabled
-    if (options.smoothing && options.smoothing > 0) {
-      const smoothedData = new Uint8ClampedArray(data)
-      
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          const index = (y * width + x) * 4
-          
-          // Only smooth alpha channel for edge pixels
-          if (data[index + 3] > 0 && data[index + 3] < 255) {
-            let alphaSum = 0
-            let weightSum = 0
-            let count = 0
-            
-            // AI-enhanced sampling with distance weighting
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                const neighborIndex = ((y + dy) * width + (x + dx)) * 4
-                const distance = Math.sqrt(dx * dx + dy * dy)
-                const weight = distance === 0 ? 2 : 1 / (distance + 0.1)
-                
-                alphaSum += data[neighborIndex + 3] * weight
-                weightSum += weight
-                count++
-              }
-            }
-            
-            const avgAlpha = alphaSum / weightSum
-            const smoothingFactor = Math.min(0.7, options.smoothing / 10)
-            smoothedData[index + 3] = Math.round(data[index + 3] * (1 - smoothingFactor) + avgAlpha * smoothingFactor)
-          }
-        }
-      }
-      
-      // Copy smoothed alpha channel back
-      for (let i = 3; i < data.length; i += 4) {
-        data[i] = smoothedData[i]
-      }
-    }
   }
 
   static async convertFormat(file: File, outputFormat: "jpeg" | "png" | "webp", options: ImageProcessingOptions): Promise<Blob> {
@@ -1064,13 +1263,11 @@ export class ImageProcessor {
           canvas.width = img.naturalWidth
           canvas.height = img.naturalHeight
 
-          // Add background color for formats that don't support transparency
           if (outputFormat === "jpeg") {
             ctx.fillStyle = "#ffffff"
             ctx.fillRect(0, 0, canvas.width, canvas.height)
           }
 
-          // Enhanced rendering
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
           
@@ -1116,7 +1313,6 @@ export class ImageProcessor {
           canvas.width = img.naturalWidth
           canvas.height = img.naturalHeight
 
-          // Enhanced filter application
           const filters = []
           const { brightness, contrast, saturation, blur, sepia, grayscale } = options.filters
 
@@ -1139,7 +1335,6 @@ export class ImageProcessor {
             ctx.filter = filters.join(" ")
           }
 
-          // Enhanced rendering
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
           

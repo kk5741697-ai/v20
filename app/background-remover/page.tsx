@@ -9,7 +9,7 @@ const backgroundRemovalOptions = [
     key: "sensitivity",
     label: "Edge Sensitivity",
     type: "slider" as const,
-    defaultValue: 30,
+    defaultValue: 25,
     min: 10,
     max: 100,
     step: 5,
@@ -18,7 +18,7 @@ const backgroundRemovalOptions = [
     key: "smoothing",
     label: "Edge Smoothing",
     type: "slider" as const,
-    defaultValue: 2,
+    defaultValue: 3,
     min: 0,
     max: 10,
     step: 1,
@@ -34,6 +34,18 @@ const backgroundRemovalOptions = [
     label: "Preserve Fine Details",
     type: "checkbox" as const,
     defaultValue: true,
+  },
+  {
+    key: "algorithm",
+    label: "Detection Algorithm",
+    type: "select" as const,
+    defaultValue: "hybrid",
+    selectOptions: [
+      { value: "auto", label: "Auto (Recommended)" },
+      { value: "hybrid", label: "Hybrid (Best Quality)" },
+      { value: "edge-detection", label: "Edge Detection" },
+      { value: "color-clustering", label: "Color Clustering" },
+    ],
   },
 ]
 

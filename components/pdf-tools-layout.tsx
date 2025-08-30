@@ -425,7 +425,7 @@ export function PDFToolsLayout({
 
         
         {/* Top Ad Banner - Responsive */}
-        <div className="bg-white border-b">
+        <div className="bg-white">
           <div className="container mx-auto px-4 py-2 lg:py-3">
             <AdBanner 
               adSlot="tool-header-banner"

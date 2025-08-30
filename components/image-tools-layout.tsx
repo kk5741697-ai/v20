@@ -534,6 +534,18 @@ export function ImageToolsLayout({
             </div>
             <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">{description}</p>
           </div>
+
+
+<div className="bg-white">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+            mobileOptimized={true}
+          />
+        </div>
+      </div>
           
           <div className="max-w-4xl mx-auto">
             <div 

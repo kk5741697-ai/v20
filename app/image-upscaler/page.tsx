@@ -2,7 +2,7 @@
 
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { ZoomIn } from "lucide-react"
-import { AdvancedImageProcessor } from "@/lib/processors/advanced-image-processor"
+import { UltimateImageUpscaler } from "@/lib/processors/ultimate-upscaler"
 
 const upscaleOptions = [
   {
@@ -14,24 +14,67 @@ const upscaleOptions = [
       { value: "1.25", label: "1.25x (125%)" },
       { value: "1.5", label: "1.5x (150%)" },
       { value: "2.0", label: "2x (200%)" },
-      { value: "2.5", label: "2.5x (250%) - Small Images Only" },
+      { value: "3.0", label: "3x (300%)" },
+      { value: "4.0", label: "4x (400%) - Small Images Only" },
     ],
-    section: "Settings",
+    section: "Scale Settings",
   },
   {
-    key: "algorithm",
-    label: "Upscaling Algorithm",
+    key: "primaryAlgorithm",
+    label: "Primary AI Algorithm",
     type: "select" as const,
     defaultValue: "auto",
     selectOptions: [
       { value: "auto", label: "Auto (Recommended)" },
-      { value: "lanczos", label: "Lanczos (Sharp Details)" },
-      { value: "bicubic", label: "Bicubic (Smooth)" },
-      { value: "super-resolution", label: "Super Resolution (Best Quality)" },
+      { value: "esrgan", label: "ESRGAN (Photos)" },
+      { value: "real-esrgan", label: "Real-ESRGAN (Compressed Photos)" },
       { value: "waifu2x", label: "Waifu2x (Anime/Art)" },
-      { value: "esrgan", label: "ESRGAN (Photo Enhancement)" },
+      { value: "srcnn", label: "SRCNN (Noise Reduction)" },
+      { value: "edsr", label: "EDSR (High Quality)" },
+      { value: "lanczos", label: "Lanczos (Text/Sharp)" },
     ],
-    section: "Algorithm",
+    section: "Primary AI Model",
+  },
+  {
+    key: "secondaryAlgorithm",
+    label: "Secondary Algorithm",
+    type: "select" as const,
+    defaultValue: "bicubic",
+    selectOptions: [
+      { value: "lanczos", label: "Lanczos" },
+      { value: "bicubic", label: "Bicubic" },
+      { value: "mitchell", label: "Mitchell" },
+      { value: "catmull-rom", label: "Catmull-Rom" },
+    ],
+    section: "Secondary Algorithm",
+  },
+  {
+    key: "hybridMode",
+    label: "Hybrid Processing",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "AI Models",
+  },
+  {
+    key: "enableContentAnalysis",
+    label: "Content Analysis",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "AI Models",
+  },
+  {
+    key: "contentType",
+    label: "Content Type",
+    type: "select" as const,
+    defaultValue: "auto",
+    selectOptions: [
+      { value: "auto", label: "Auto Detect" },
+      { value: "photo", label: "Photograph" },
+      { value: "art", label: "Art/Anime" },
+      { value: "text", label: "Text/Graphics" },
+      { value: "mixed", label: "Mixed Content" },
+    ],
+    section: "Content Analysis",
   },
   {
     key: "enhanceDetails",
@@ -48,24 +91,55 @@ const upscaleOptions = [
     section: "Enhancement",
   },
   {
-    key: "sharpen",
-    label: "Sharpening",
+    key: "sharpenAmount",
+    label: "Sharpening Amount",
     type: "slider" as const,
-    defaultValue: 20,
+    defaultValue: 25,
+    min: 0,
+    max: 100,
+    step: 5,
+    section: "Enhancement",
+  },
+  {
+    key: "colorEnhancement",
+    label: "Color Enhancement",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Enhancement",
+  },
+  {
+    key: "contrastBoost",
+    label: "Contrast Boost",
+    type: "slider" as const,
+    defaultValue: 10,
     min: 0,
     max: 50,
     step: 5,
     section: "Enhancement",
   },
   {
+    key: "multiPass",
+    label: "Multi-Pass Processing",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Quality",
+  },
+  {
+    key: "chunkProcessing",
+    label: "Memory Optimized",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Performance",
+  },
+  {
     key: "quality",
     label: "Output Quality",
     type: "slider" as const,
     defaultValue: 95,
-    min: 70,
+    min: 80,
     max: 100,
     step: 5,
-    section: "Settings",
+    section: "Output",
   },
 ]
 
@@ -79,11 +153,11 @@ async function upscaleImages(files: any[], options: any) {
     }
 
     // Enhanced safety checks for upscaling
-    const largeFiles = files.filter((f: any) => f.file.size > 8 * 1024 * 1024)
+    const largeFiles = files.filter((f: any) => f.file.size > 15 * 1024 * 1024)
     if (largeFiles.length > 0) {
       return {
         success: false,
-        error: `${largeFiles.length} file(s) are too large for upscaling. Please use images smaller than 8MB.`,
+        error: `${largeFiles.length} file(s) are too large. Please use images smaller than 15MB.`,
       }
     }
     
@@ -103,46 +177,58 @@ async function upscaleImages(files: any[], options: any) {
       files.map(async (file) => {
         try {
           const scaleFactor = parseFloat(options.scaleFactor || "2.0")
-        
-          const upscaleOptions = {
+          
+          const ultimateOptions = {
             scaleFactor,
-            algorithm: options.algorithm || "auto",
+            maxOutputDimension: 4096,
+            primaryAlgorithm: options.primaryAlgorithm || "auto",
+            secondaryAlgorithm: options.secondaryAlgorithm || "bicubic",
+            hybridMode: options.hybridMode !== false,
+            enableContentAnalysis: options.enableContentAnalysis !== false,
+            contentType: options.contentType || "auto",
             enhanceDetails: options.enhanceDetails !== false,
             reduceNoise: options.reduceNoise !== false,
-            sharpen: Math.min(options.sharpen || 20, 50), // Cap sharpening
-            quality: options.quality || 95,
-            autoOptimize: options.algorithm === "auto",
-            maxDimensions: { width: 1536, height: 1536 }, // Reduced for stability
+            sharpenAmount: options.sharpenAmount || 25,
+            colorEnhancement: options.colorEnhancement !== false,
+            contrastBoost: options.contrastBoost || 10,
+            multiPass: options.multiPass !== false,
             memoryOptimized: true,
-            progressCallback: (progress: number) => {
-              console.log(`Upscaling: ${Math.round(progress)}%`)
-            }
+            chunkProcessing: options.chunkProcessing !== false,
+            outputFormat: "png",
+            quality: options.quality || 95,
+            progressCallback: (progress: number, stage: string) => {
+              console.log(`Ultimate Upscaling: ${Math.round(progress)}% - ${stage}`)
+            },
+            debugMode: false
           }
 
-          const processedBlob = await AdvancedImageProcessor.upscaleImageAdvanced(
+          const result = await UltimateImageUpscaler.upscaleImage(
             file.originalFile || file.file,
-            upscaleOptions
+            ultimateOptions
           )
 
-          const processedUrl = URL.createObjectURL(processedBlob)
+          const processedUrl = URL.createObjectURL(result.processedBlob)
         
           const baseName = file.name.split(".")[0]
-          const newName = `${baseName}_${scaleFactor}x_upscaled.png`
+          const newName = `${baseName}_${result.actualScaleFactor}x_ultimate_upscaled.png`
 
-          // Calculate new dimensions
-          const newDimensions = file.dimensions ? {
-            width: Math.round(file.dimensions.width * scaleFactor),
-            height: Math.round(file.dimensions.height * scaleFactor)
-          } : undefined
+          const newDimensions = {
+            width: result.finalDimensions.width,
+            height: result.finalDimensions.height
+          }
 
           return {
             ...file,
             processed: true,
             processedPreview: processedUrl,
             name: newName,
-            processedSize: processedBlob.size,
-            blob: processedBlob,
-            dimensions: newDimensions
+            processedSize: result.processedBlob.size,
+            blob: result.processedBlob,
+            dimensions: newDimensions,
+            actualScaleFactor: result.actualScaleFactor,
+            algorithmsUsed: result.algorithmsUsed,
+            processingTime: result.processingTime,
+            qualityMetrics: result.qualityMetrics
           }
         } catch (error) {
           console.error(`Failed to upscale ${file.name}:`, error)
@@ -186,12 +272,12 @@ export default function ImageUpscalerPage() {
   return (
     <ImageToolsLayout
       title="Image Upscaler"
-      description="Enlarge images with advanced AI algorithms. Choose from specialized models for different content types including photos, art, and graphics."
+      description="Ultimate AI-powered image upscaling with multiple algorithms, content analysis, and professional-grade enhancement. Supports photos, art, text, and mixed content."
       icon={ZoomIn}
       toolType="upscale"
       processFunction={upscaleImages}
       options={upscaleOptions}
-      maxFiles={5}
+      maxFiles={3}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "jpeg", "webp"]}

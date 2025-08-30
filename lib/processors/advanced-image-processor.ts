@@ -1,4 +1,7 @@
-// Advanced image processing with multiple upscaling algorithms and enhanced quality
+// Import the ultimate upscaler
+import { UltimateImageUpscaler, type UltimateUpscaleOptions, type UpscaleResult } from "./ultimate-upscaler"
+
+// Legacy interface for backward compatibility
 export interface AdvancedImageOptions {
   scaleFactor?: number
   algorithm?: "auto" | "lanczos" | "bicubic" | "super-resolution" | "waifu2x" | "esrgan"
@@ -15,113 +18,37 @@ export interface AdvancedImageOptions {
 }
 
 export class AdvancedImageProcessor {
-  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // Reduced for stability
-  private static readonly MAX_CANVAS_SIZE = 2048 // Reduced max canvas dimension
-  
   static async upscaleImageAdvanced(file: File, options: AdvancedImageOptions = {}): Promise<Blob> {
-    // Enhanced auto-optimization
-    const autoOptions = this.getEnhancedAutoSettings(file, options)
-    const finalOptions = { ...options, ...autoOptions }
-    
-    // Enhanced file size limits
-    if (file.size > 8 * 1024 * 1024) { // 8MB limit for stability
-      throw new Error("Image too large. Please use an image smaller than 8MB for upscaling.")
+    // Convert legacy options to ultimate options
+    const ultimateOptions: UltimateUpscaleOptions = {
+      scaleFactor: options.scaleFactor || 2,
+      maxOutputDimension: Math.min(options.maxDimensions?.width || 4096, options.maxDimensions?.height || 4096),
+      primaryAlgorithm: options.algorithm === "super-resolution" ? "srcnn" : 
+                       options.algorithm === "waifu2x" ? "waifu2x" :
+                       options.algorithm === "esrgan" ? "esrgan" :
+                       options.algorithm || "auto",
+      secondaryAlgorithm: "lanczos",
+      hybridMode: true,
+      enableContentAnalysis: true,
+      contentType: "auto",
+      enhanceDetails: options.enhanceDetails !== false,
+      reduceNoise: options.reduceNoise !== false,
+      sharpenAmount: options.sharpen || 25,
+      colorEnhancement: true,
+      multiPass: true,
+      memoryOptimized: options.memoryOptimized !== false,
+      chunkProcessing: true,
+      outputFormat: "png",
+      quality: options.quality || 95,
+      progressCallback: options.progressCallback ? 
+        (progress, stage) => options.progressCallback!(progress) : undefined,
+      debugMode: false
     }
     
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", { 
-        alpha: true,
-        willReadFrequently: false,
-        desynchronized: true
-      })
-      
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
-      }
-
-      const img = new Image()
-      img.onload = async () => {
-        try {
-          finalOptions.progressCallback?.(10)
-          
-          // Enhanced dimension calculation
-          const { workingWidth, workingHeight, needsPreScale } = this.calculateEnhancedDimensions(
-            img.naturalWidth, 
-            img.naturalHeight,
-            finalOptions.scaleFactor || 2,
-            finalOptions.maxDimensions
-          )
-          
-          // Additional safety check for memory
-          if (workingWidth * workingHeight * (finalOptions.scaleFactor || 2) ** 2 > this.MAX_SAFE_PIXELS) {
-            const safeScale = Math.sqrt(this.MAX_SAFE_PIXELS / (workingWidth * workingHeight))
-            finalOptions.scaleFactor = Math.min(finalOptions.scaleFactor || 2, safeScale)
-          }
-          
-          finalOptions.progressCallback?.(20)
-          
-          let sourceCanvas = canvas
-          let sourceCtx = ctx
-          
-          // Pre-scale if needed for memory safety
-          if (needsPreScale) {
-            const preScaleCanvas = document.createElement("canvas")
-            const preScaleCtx = preScaleCanvas.getContext("2d")!
-            
-            preScaleCanvas.width = workingWidth
-            preScaleCanvas.height = workingHeight
-            
-            preScaleCtx.imageSmoothingEnabled = true
-            preScaleCtx.imageSmoothingQuality = "high"
-            preScaleCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
-            
-            sourceCanvas = preScaleCanvas
-            sourceCtx = preScaleCtx
-          } else {
-            canvas.width = img.naturalWidth
-            canvas.height = img.naturalHeight
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(img, 0, 0)
-          }
-          
-          finalOptions.progressCallback?.(40)
-          
-          // Apply enhanced upscaling with selected algorithm
-          const upscaledCanvas = await this.applyEnhancedUpscaling(sourceCanvas, finalOptions)
-          
-          finalOptions.progressCallback?.(80)
-          
-          // Apply enhanced post-processing
-          if (finalOptions.autoOptimize !== false) {
-            await this.applyEnhancedPostProcessing(upscaledCanvas, finalOptions)
-          }
-          
-          finalOptions.progressCallback?.(100)
-          
-          upscaledCanvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error("Failed to create blob"))
-              }
-            },
-            "image/png",
-            (finalOptions.quality || 95) / 100
-          )
-        } catch (error) {
-          console.error("Upscaling failed:", error)
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(file)
-    })
+    // Use the ultimate upscaler
+    const result = await UltimateImageUpscaler.upscaleImage(file, ultimateOptions)
+    
+    return result.processedBlob
   }
 
   private static getEnhancedAutoSettings(file: File, options: AdvancedImageOptions): Partial<AdvancedImageOptions> {

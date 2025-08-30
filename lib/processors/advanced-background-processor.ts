@@ -1,4 +1,7 @@
-// Advanced background removal with improved AI algorithms and crash prevention
+// Import the ultimate background processor
+import { UltimateBackgroundProcessor, type UltimateBackgroundOptions, type ProcessingResult } from "./ultimate-background-processor"
+
+// Legacy interface for backward compatibility
 export interface BackgroundRemovalOptions {
   algorithm?: "auto" | "portrait" | "object" | "animal" | "product" | "general"
   sensitivity?: number
@@ -18,134 +21,39 @@ export interface BackgroundRemovalResult {
 }
 
 export class AdvancedBackgroundProcessor {
-  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // Reduced for stability
-  private static readonly MAX_CANVAS_SIZE = 2048
-  
   static async removeBackground(
     imageFile: File, 
     options: BackgroundRemovalOptions = {}
   ): Promise<BackgroundRemovalResult> {
-    const startTime = Date.now()
-    
-    // Enhanced memory safety checks
-    if (imageFile.size > 15 * 1024 * 1024) { // 15MB limit
-      throw new Error("Image too large for background removal. Please use an image smaller than 15MB.")
+    // Convert legacy options to ultimate options
+    const ultimateOptions: UltimateBackgroundOptions = {
+      primaryModel: options.algorithm || "auto",
+      secondaryModel: "edge-detection",
+      hybridMode: true,
+      enableObjectDetection: true,
+      sensitivity: options.sensitivity || 25,
+      edgeFeathering: options.featherEdges !== false ? 50 : 0,
+      detailPreservation: options.preserveDetails !== false ? 80 : 0,
+      smoothingLevel: options.smoothing || 20,
+      memoryOptimized: options.memoryOptimized !== false,
+      multiPass: true,
+      chunkProcessing: true,
+      maxDimensions: options.maxDimensions || { width: 2048, height: 2048 },
+      outputFormat: options.outputFormat || "png",
+      quality: 95,
+      progressCallback: options.progressCallback,
+      debugMode: false
     }
-
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d", { 
-        alpha: true,
-        willReadFrequently: true,
-        desynchronized: true
-      })
-      
-      if (!ctx) {
-        reject(new Error("Canvas not supported"))
-        return
-      }
-
-      const img = new Image()
-      img.onload = async () => {
-        try {
-          options.progressCallback?.(10, "Analyzing image")
-          
-          // Calculate safe working dimensions
-          let workingWidth = img.naturalWidth
-          let workingHeight = img.naturalHeight
-          let needsResize = false
-          
-          // Check if image is too large for processing
-          if (workingWidth * workingHeight > this.MAX_SAFE_PIXELS) {
-            const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (workingWidth * workingHeight))
-            workingWidth = Math.floor(workingWidth * scale)
-            workingHeight = Math.floor(workingHeight * scale)
-            needsResize = true
-          }
-          
-          // Apply max dimensions if specified
-          if (options.maxDimensions) {
-            const maxScale = Math.min(
-              options.maxDimensions.width / workingWidth,
-              options.maxDimensions.height / workingHeight,
-              1
-            )
-            if (maxScale < 1) {
-              workingWidth = Math.floor(workingWidth * maxScale)
-              workingHeight = Math.floor(workingHeight * maxScale)
-              needsResize = true
-            }
-          }
-          
-          // Create working canvas
-          const workingCanvas = document.createElement("canvas")
-          const workingCtx = workingCanvas.getContext("2d", { alpha: true })!
-          workingCanvas.width = workingWidth
-          workingCanvas.height = workingHeight
-          
-          options.progressCallback?.(20, "Preparing image")
-          
-          // Draw image at working resolution
-          workingCtx.imageSmoothingEnabled = true
-          workingCtx.imageSmoothingQuality = "high"
-          workingCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
-          
-          options.progressCallback?.(30, "Detecting subject")
-          
-          // Get image data for processing
-          const imageData = workingCtx.getImageData(0, 0, workingWidth, workingHeight)
-          
-          // Apply improved background removal
-          await this.processBackgroundRemoval(imageData, options)
-          
-          options.progressCallback?.(80, "Finalizing")
-          
-          // Put processed data back
-          workingCtx.putImageData(imageData, 0, 0)
-          
-          // Scale back to original size if needed
-          if (needsResize) {
-            canvas.width = img.naturalWidth
-            canvas.height = img.naturalHeight
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(workingCanvas, 0, 0, img.naturalWidth, img.naturalHeight)
-          } else {
-            canvas.width = workingWidth
-            canvas.height = workingHeight
-            ctx.drawImage(workingCanvas, 0, 0)
-          }
-          
-          options.progressCallback?.(90, "Creating output")
-          
-          const quality = options.outputFormat === "webp" ? 0.9 : 1.0
-          const mimeType = `image/${options.outputFormat || "png"}`
-          
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const processingTime = Date.now() - startTime
-                resolve({
-                  processedBlob: blob,
-                  confidence: 0.85, // Simulated confidence score
-                  processingTime
-                })
-              } else {
-                reject(new Error("Failed to create output blob"))
-              }
-            },
-            mimeType,
-            quality
-          )
-        } catch (error) {
-          reject(error)
-        }
-      }
-
-      img.onerror = () => reject(new Error("Failed to load image"))
-      img.crossOrigin = "anonymous"
-      img.src = URL.createObjectURL(imageFile)
-    })
+    
+    // Use the ultimate processor
+    const result = await UltimateBackgroundProcessor.removeBackground(imageFile, ultimateOptions)
+    
+    // Convert result to legacy format
+    return {
+      processedBlob: result.processedBlob,
+      confidence: result.confidence,
+      processingTime: result.processingTime
+    }
   }
 
   private static async processBackgroundRemoval(

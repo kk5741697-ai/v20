@@ -2,7 +2,7 @@
 
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Eraser } from "lucide-react"
-import { AdvancedBackgroundProcessor } from "@/lib/processors/advanced-background-processor"
+import { UltimateBackgroundProcessor } from "@/lib/processors/ultimate-background-processor"
 
 const backgroundOptions = [
   {
@@ -18,7 +18,34 @@ const backgroundOptions = [
       { value: "product", label: "Product Photography Model" },
       { value: "general", label: "General Purpose Model" },
     ],
-    section: "AI Model",
+    section: "Primary AI Model",
+  },
+  {
+    key: "secondaryModel",
+    label: "Secondary Model",
+    type: "select" as const,
+    defaultValue: "edge-detection",
+    selectOptions: [
+      { value: "edge-detection", label: "Edge Detection" },
+      { value: "color-clustering", label: "Color Clustering" },
+      { value: "texture-analysis", label: "Texture Analysis" },
+      { value: "gradient-flow", label: "Gradient Flow" },
+    ],
+    section: "Secondary AI Model",
+  },
+  {
+    key: "hybridMode",
+    label: "Hybrid Processing",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "AI Models",
+  },
+  {
+    key: "enableObjectDetection",
+    label: "Object Detection",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "AI Models",
   },
   {
     key: "sensitivity",
@@ -31,18 +58,48 @@ const backgroundOptions = [
     section: "Detection",
   },
   {
-    key: "featherEdges",
-    label: "Feather Edges",
-    type: "checkbox" as const,
-    defaultValue: true,
+    key: "edgeFeathering",
+    label: "Edge Feathering",
+    type: "slider" as const,
+    defaultValue: 50,
+    min: 0,
+    max: 100,
+    step: 10,
     section: "Detection",
   },
   {
-    key: "preserveDetails",
-    label: "Preserve Fine Details",
+    key: "detailPreservation",
+    label: "Detail Preservation",
+    type: "slider" as const,
+    defaultValue: 80,
+    min: 0,
+    max: 100,
+    step: 10,
+    section: "Detection",
+  },
+  {
+    key: "smoothingLevel",
+    label: "Smoothing Level",
+    type: "slider" as const,
+    defaultValue: 20,
+    min: 0,
+    max: 50,
+    step: 5,
+    section: "Post-Processing",
+  },
+  {
+    key: "multiPass",
+    label: "Multi-Pass Processing",
     type: "checkbox" as const,
     defaultValue: true,
-    section: "Detection",
+    section: "Quality",
+  },
+  {
+    key: "chunkProcessing",
+    label: "Memory Optimized",
+    type: "checkbox" as const,
+    defaultValue: true,
+    section: "Performance",
   },
   {
     key: "outputFormat",
@@ -53,7 +110,17 @@ const backgroundOptions = [
       { value: "png", label: "PNG (Transparent)" },
       { value: "webp", label: "WebP (Smaller)" },
     ],
-    section: "Settings",
+    section: "Output",
+  },
+  {
+    key: "quality",
+    label: "Output Quality",
+    type: "slider" as const,
+    defaultValue: 95,
+    min: 70,
+    max: 100,
+    step: 5,
+    section: "Output",
   },
 ]
 
@@ -78,38 +145,49 @@ async function removeBackgrounds(files: any[], options: any) {
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         try {
-        const backgroundOptions = {
-          algorithm: options.model || "auto",
-          sensitivity: options.sensitivity || 25,
-          featherEdges: options.featherEdges !== false,
-          preserveDetails: options.preserveDetails !== false,
-          smoothing: 4,
-          outputFormat: options.outputFormat || "png",
-            maxDimensions: { width: 1024, height: 1024 },
-          maxDimensions: { width: 1536, height: 1536 },
-          progressCallback: (progress: number, stage: string) => {
-            console.log(`Processing: ${Math.round(progress)}% - ${stage}`)
+          const ultimateOptions = {
+            primaryModel: options.model || "auto",
+            secondaryModel: options.secondaryModel || "edge-detection",
+            hybridMode: options.hybridMode !== false,
+            enableObjectDetection: options.enableObjectDetection !== false,
+            sensitivity: options.sensitivity || 25,
+            edgeFeathering: options.edgeFeathering || 50,
+            detailPreservation: options.detailPreservation || 80,
+            smoothingLevel: options.smoothingLevel || 20,
+            memoryOptimized: options.chunkProcessing !== false,
+            multiPass: options.multiPass !== false,
+            chunkProcessing: options.chunkProcessing !== false,
+            maxDimensions: { width: 2048, height: 2048 },
+            outputFormat: options.outputFormat || "png",
+            quality: options.quality || 95,
+            progressCallback: (progress: number, stage: string) => {
+              console.log(`Ultimate Processing: ${Math.round(progress)}% - ${stage}`)
+            },
+            debugMode: false
           }
-        }
 
-        const result = await AdvancedBackgroundProcessor.removeBackground(
-          file.originalFile || file.file,
-          backgroundOptions
-        )
+          const result = await UltimateBackgroundProcessor.removeBackground(
+            file.originalFile || file.file,
+            ultimateOptions
+          )
 
-        const processedUrl = URL.createObjectURL(result.processedBlob)
+          const processedUrl = URL.createObjectURL(result.processedBlob)
         
-        const baseName = file.name.split(".")[0]
-        const newName = `${baseName}_no_bg.${options.outputFormat || "png"}`
+          const baseName = file.name.split(".")[0]
+          const newName = `${baseName}_ultimate_bg_removed.${options.outputFormat || "png"}`
 
-        return {
-          ...file,
-          processed: true,
-          processedPreview: processedUrl,
-          name: newName,
-          processedSize: result.processedBlob.size,
-          blob: result.processedBlob
-        }
+          return {
+            ...file,
+            processed: true,
+            processedPreview: processedUrl,
+            name: newName,
+            processedSize: result.processedBlob.size,
+            blob: result.processedBlob,
+            confidence: result.confidence,
+            processingTime: result.processingTime,
+            modelsUsed: result.modelsUsed,
+            objectsDetected: result.objectsDetected
+          }
         } catch (error) {
           console.error(`Failed to process ${file.name}:`, error)
           return {
@@ -152,12 +230,12 @@ export default function BackgroundRemoverPage() {
   return (
     <ImageToolsLayout
       title="Background Remover"
-      description="Remove image backgrounds with advanced AI models. Choose from specialized models for portraits, objects, animals, and products for best results."
+      description="Ultimate AI-powered background removal with multiple models, object detection, and professional-grade results. Supports portraits, objects, animals, and products."
       icon={Eraser}
       toolType="background-removal"
       processFunction={removeBackgrounds}
       options={backgroundOptions}
-      maxFiles={5}
+      maxFiles={3}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "webp"]}

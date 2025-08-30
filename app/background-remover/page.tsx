@@ -66,8 +66,18 @@ async function removeBackgrounds(files: any[], options: any) {
       }
     }
 
+    // Enhanced safety checks
+    const largeFiles = files.filter((f: any) => f.file.size > 8 * 1024 * 1024)
+    if (largeFiles.length > 0) {
+      return {
+        success: false,
+        error: `${largeFiles.length} file(s) are too large. Please use images smaller than 8MB.`,
+      }
+    }
+
     const processedFiles = await Promise.all(
       files.map(async (file) => {
+        try {
         const backgroundOptions = {
           algorithm: options.model || "auto",
           sensitivity: options.sensitivity || 25,
@@ -75,7 +85,7 @@ async function removeBackgrounds(files: any[], options: any) {
           preserveDetails: options.preserveDetails !== false,
           smoothing: 4,
           outputFormat: options.outputFormat || "png",
-          memoryOptimized: true,
+            maxDimensions: { width: 1024, height: 1024 },
           maxDimensions: { width: 1536, height: 1536 },
           progressCallback: (progress: number, stage: string) => {
             console.log(`Processing: ${Math.round(progress)}% - ${stage}`)
@@ -100,14 +110,37 @@ async function removeBackgrounds(files: any[], options: any) {
           processedSize: result.processedBlob.size,
           blob: result.processedBlob
         }
+        } catch (error) {
+          console.error(`Failed to process ${file.name}:`, error)
+          return {
+            ...file,
+            processed: false,
+            error: error instanceof Error ? error.message : "Processing failed"
+          }
+        }
       })
     )
 
+    // Filter out failed files
+    const successfulFiles = processedFiles.filter(f => f.processed)
+    const failedFiles = processedFiles.filter(f => !f.processed)
+    
+    if (failedFiles.length > 0) {
+      console.warn(`${failedFiles.length} files failed to process`)
+    }
+    
+    if (successfulFiles.length === 0) {
+      return {
+        success: false,
+        error: "All files failed to process. Please try with smaller images or different settings.",
+      }
+    }
     return {
       success: true,
-      processedFiles,
+      processedFiles: successfulFiles,
     }
   } catch (error) {
+    console.error("Background removal batch failed:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to remove backgrounds",

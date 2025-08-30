@@ -106,6 +106,43 @@ export default function RootLayout({
                 }
               });
               
+              // Enhanced error handling for image processing
+              window.addEventListener('error', function(e) {
+                if (e.message && e.message.includes('out of memory')) {
+                  console.warn('Memory error detected, cleaning up...');
+                  // Clean up blob URLs
+                  const images = document.querySelectorAll('img[src^="blob:"]');
+                  images.forEach(img => {
+                    if (img.src) URL.revokeObjectURL(img.src);
+                  });
+                  
+                  // Force garbage collection if available
+                  if ('gc' in window && typeof window.gc === 'function') {
+                    window.gc();
+                  }
+                }
+              });
+              
+              // Prevent navigation during processing
+              let isProcessing = false;
+              document.addEventListener('click', function(e) {
+                const target = e.target;
+                if (target && target.textContent && 
+                    (target.textContent.includes('Process') || target.textContent.includes('Generate'))) {
+                  isProcessing = true;
+                  setTimeout(() => { isProcessing = false; }, 30000); // Reset after 30s
+                }
+              });
+              
+              // Warn before navigation during processing
+              window.addEventListener('beforeunload', function(e) {
+                if (isProcessing) {
+                  e.preventDefault();
+                  e.returnValue = 'Processing in progress. Are you sure you want to leave?';
+                  return e.returnValue;
+                }
+              });
+              
               // Handle SPA navigation for AdSense
               let currentPath = window.location.pathname;
               

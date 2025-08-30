@@ -15,8 +15,8 @@ export interface AdvancedImageOptions {
 }
 
 export class AdvancedImageProcessor {
-  private static readonly MAX_SAFE_PIXELS = 3072 * 3072 // Increased for better quality
-  private static readonly MAX_CANVAS_SIZE = 4096 // Max canvas dimension
+  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // Reduced for stability
+  private static readonly MAX_CANVAS_SIZE = 2048 // Reduced max canvas dimension
   
   static async upscaleImageAdvanced(file: File, options: AdvancedImageOptions = {}): Promise<Blob> {
     // Enhanced auto-optimization
@@ -24,8 +24,8 @@ export class AdvancedImageProcessor {
     const finalOptions = { ...options, ...autoOptions }
     
     // Enhanced file size limits
-    if (file.size > 12 * 1024 * 1024) { // 12MB limit
-      throw new Error("Image too large. Please use an image smaller than 12MB for upscaling.")
+    if (file.size > 8 * 1024 * 1024) { // 8MB limit for stability
+      throw new Error("Image too large. Please use an image smaller than 8MB for upscaling.")
     }
     
     return new Promise((resolve, reject) => {
@@ -53,6 +53,12 @@ export class AdvancedImageProcessor {
             finalOptions.scaleFactor || 2,
             finalOptions.maxDimensions
           )
+          
+          // Additional safety check for memory
+          if (workingWidth * workingHeight * (finalOptions.scaleFactor || 2) ** 2 > this.MAX_SAFE_PIXELS) {
+            const safeScale = Math.sqrt(this.MAX_SAFE_PIXELS / (workingWidth * workingHeight))
+            finalOptions.scaleFactor = Math.min(finalOptions.scaleFactor || 2, safeScale)
+          }
           
           finalOptions.progressCallback?.(20)
           
@@ -107,6 +113,7 @@ export class AdvancedImageProcessor {
             (finalOptions.quality || 95) / 100
           )
         } catch (error) {
+          console.error("Upscaling failed:", error)
           reject(error)
         }
       }
@@ -122,13 +129,17 @@ export class AdvancedImageProcessor {
     
     // Enhanced algorithm selection based on file analysis
     if (!options.algorithm || options.algorithm === "auto") {
-      if (file.name.toLowerCase().includes('anime') || file.name.toLowerCase().includes('art')) {
+      // Improved auto-detection based on file characteristics
+      const fileName = file.name.toLowerCase()
+      const fileSize = file.size
+      
+      if (fileName.includes('anime') || fileName.includes('art') || fileName.includes('cartoon')) {
         autoSettings.algorithm = "waifu2x"
-      } else if (file.type.includes('jpeg') || file.name.toLowerCase().includes('photo')) {
+      } else if (file.type.includes('jpeg') || fileName.includes('photo') || fileName.includes('portrait')) {
         autoSettings.algorithm = "esrgan"
-      } else if (file.size < 3 * 1024 * 1024) { // < 3MB
+      } else if (fileSize < 2 * 1024 * 1024) { // < 2MB
         autoSettings.algorithm = "super-resolution"
-      } else if (file.size < 8 * 1024 * 1024) { // < 8MB
+      } else if (fileSize < 5 * 1024 * 1024) { // < 5MB
         autoSettings.algorithm = "lanczos"
       } else {
         autoSettings.algorithm = "bicubic"
@@ -137,34 +148,36 @@ export class AdvancedImageProcessor {
     
     // Enhanced scale factor selection
     if (!options.scaleFactor) {
-      if (file.size > 8 * 1024 * 1024) {
-        autoSettings.scaleFactor = 1.5 // Conservative for large files
-      } else if (file.size > 4 * 1024 * 1024) {
+      if (file.size > 5 * 1024 * 1024) {
+        autoSettings.scaleFactor = 1.25 // Very conservative for large files
+      } else if (file.size > 2 * 1024 * 1024) {
+        autoSettings.scaleFactor = 1.5 // Conservative for medium files
+      } else if (file.size > 1 * 1024 * 1024) {
         autoSettings.scaleFactor = 2.0
       } else {
-        autoSettings.scaleFactor = 2.5 // More aggressive for smaller files
+        autoSettings.scaleFactor = 2.5 // Aggressive for small files only
       }
     }
     
     // Enhanced feature settings
     autoSettings.enhanceDetails = true
-    autoSettings.reduceNoise = file.size > 2 * 1024 * 1024
-    autoSettings.sharpen = file.type.includes('jpeg') ? 35 : 25 // More sharpening for JPEG
+    autoSettings.reduceNoise = file.size > 1 * 1024 * 1024
+    autoSettings.sharpen = file.type.includes('jpeg') ? 30 : 20 // Reduced sharpening
     autoSettings.memoryOptimized = true
     autoSettings.autoOptimize = true
     autoSettings.preserveAspectRatio = true
     
-    // Enhanced max dimensions based on algorithm
+    // Enhanced max dimensions based on algorithm with safety limits
     const algorithmLimits = {
-      'waifu2x': { width: 4096, height: 4096 },
-      'esrgan': { width: 3072, height: 3072 },
-      'super-resolution': { width: 2048, height: 2048 },
-      'lanczos': { width: 4096, height: 4096 },
-      'bicubic': { width: 3072, height: 3072 }
+      'waifu2x': { width: 2048, height: 2048 },
+      'esrgan': { width: 1536, height: 1536 },
+      'super-resolution': { width: 1536, height: 1536 },
+      'lanczos': { width: 2048, height: 2048 },
+      'bicubic': { width: 1536, height: 1536 }
     }
     
     const selectedAlgorithm = autoSettings.algorithm || 'lanczos'
-    autoSettings.maxDimensions = algorithmLimits[selectedAlgorithm as keyof typeof algorithmLimits] || { width: 2048, height: 2048 }
+    autoSettings.maxDimensions = algorithmLimits[selectedAlgorithm as keyof typeof algorithmLimits] || { width: 1536, height: 1536 }
     
     return autoSettings
   }
@@ -198,6 +211,15 @@ export class AdvancedImageProcessor {
       const scale = Math.min(maxWidth / targetWidth, maxHeight / targetHeight)
       workingWidth = Math.floor(originalWidth * scale)
       workingHeight = Math.floor(originalHeight * scale)
+      needsPreScale = true
+    }
+    
+    // Additional safety check for memory usage
+    const estimatedMemory = workingWidth * workingHeight * scaleFactor * scaleFactor * 4 // 4 bytes per pixel
+    if (estimatedMemory > 50 * 1024 * 1024) { // 50MB memory limit
+      const memoryScale = Math.sqrt(50 * 1024 * 1024 / estimatedMemory)
+      workingWidth = Math.floor(workingWidth * memoryScale)
+      workingHeight = Math.floor(workingHeight * memoryScale)
       needsPreScale = true
     }
     

@@ -11,11 +11,10 @@ const upscaleOptions = [
     type: "select" as const,
     defaultValue: "2.0",
     selectOptions: [
+      { value: "1.25", label: "1.25x (125%)" },
       { value: "1.5", label: "1.5x (150%)" },
       { value: "2.0", label: "2x (200%)" },
-      { value: "2.5", label: "2.5x (250%)" },
-      { value: "3.0", label: "3x (300%)" },
-      { value: "4.0", label: "4x (400%)" },
+      { value: "2.5", label: "2.5x (250%) - Small Images Only" },
     ],
     section: "Settings",
   },
@@ -52,9 +51,9 @@ const upscaleOptions = [
     key: "sharpen",
     label: "Sharpening",
     type: "slider" as const,
-    defaultValue: 25,
+    defaultValue: 20,
     min: 0,
-    max: 100,
+    max: 50,
     step: 5,
     section: "Enhancement",
   },
@@ -79,58 +78,103 @@ async function upscaleImages(files: any[], options: any) {
       }
     }
 
+    // Enhanced safety checks for upscaling
+    const largeFiles = files.filter((f: any) => f.file.size > 8 * 1024 * 1024)
+    if (largeFiles.length > 0) {
+      return {
+        success: false,
+        error: `${largeFiles.length} file(s) are too large for upscaling. Please use images smaller than 8MB.`,
+      }
+    }
+    
+    const scaleFactor = parseFloat(options.scaleFactor || "2.0")
+    const veryLargeFiles = files.filter((f: any) => {
+      const estimatedSize = f.dimensions ? f.dimensions.width * f.dimensions.height * scaleFactor * scaleFactor : 0
+      return estimatedSize > 1536 * 1536
+    })
+    
+    if (veryLargeFiles.length > 0 && scaleFactor > 2) {
+      return {
+        success: false,
+        error: `Scale factor too high for image size. Please use 2x or lower for large images.`,
+      }
+    }
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        const scaleFactor = parseFloat(options.scaleFactor || "2.0")
+        try {
+          const scaleFactor = parseFloat(options.scaleFactor || "2.0")
         
-        const upscaleOptions = {
-          scaleFactor,
-          algorithm: options.algorithm || "auto",
-          enhanceDetails: options.enhanceDetails !== false,
-          reduceNoise: options.reduceNoise !== false,
-          sharpen: options.sharpen || 25,
-          quality: options.quality || 95,
-          autoOptimize: options.algorithm === "auto",
-          maxDimensions: { width: 3072, height: 3072 },
-          memoryOptimized: true,
-          progressCallback: (progress: number) => {
-            console.log(`Upscaling: ${Math.round(progress)}%`)
+          const upscaleOptions = {
+            scaleFactor,
+            algorithm: options.algorithm || "auto",
+            enhanceDetails: options.enhanceDetails !== false,
+            reduceNoise: options.reduceNoise !== false,
+            sharpen: Math.min(options.sharpen || 20, 50), // Cap sharpening
+            quality: options.quality || 95,
+            autoOptimize: options.algorithm === "auto",
+            maxDimensions: { width: 1536, height: 1536 }, // Reduced for stability
+            memoryOptimized: true,
+            progressCallback: (progress: number) => {
+              console.log(`Upscaling: ${Math.round(progress)}%`)
+            }
           }
-        }
 
-        const processedBlob = await AdvancedImageProcessor.upscaleImageAdvanced(
-          file.originalFile || file.file,
-          upscaleOptions
-        )
+          const processedBlob = await AdvancedImageProcessor.upscaleImageAdvanced(
+            file.originalFile || file.file,
+            upscaleOptions
+          )
 
-        const processedUrl = URL.createObjectURL(processedBlob)
+          const processedUrl = URL.createObjectURL(processedBlob)
         
-        const baseName = file.name.split(".")[0]
-        const newName = `${baseName}_${scaleFactor}x_upscaled.png`
+          const baseName = file.name.split(".")[0]
+          const newName = `${baseName}_${scaleFactor}x_upscaled.png`
 
-        // Calculate new dimensions
-        const newDimensions = file.dimensions ? {
-          width: Math.round(file.dimensions.width * scaleFactor),
-          height: Math.round(file.dimensions.height * scaleFactor)
-        } : undefined
+          // Calculate new dimensions
+          const newDimensions = file.dimensions ? {
+            width: Math.round(file.dimensions.width * scaleFactor),
+            height: Math.round(file.dimensions.height * scaleFactor)
+          } : undefined
 
-        return {
-          ...file,
-          processed: true,
-          processedPreview: processedUrl,
-          name: newName,
-          processedSize: processedBlob.size,
-          blob: processedBlob,
-          dimensions: newDimensions
+          return {
+            ...file,
+            processed: true,
+            processedPreview: processedUrl,
+            name: newName,
+            processedSize: processedBlob.size,
+            blob: processedBlob,
+            dimensions: newDimensions
+          }
+        } catch (error) {
+          console.error(`Failed to upscale ${file.name}:`, error)
+          return {
+            ...file,
+            processed: false,
+            error: error instanceof Error ? error.message : "Upscaling failed"
+          }
         }
       })
     )
 
+    // Filter out failed files
+    const successfulFiles = processedFiles.filter(f => f.processed)
+    const failedFiles = processedFiles.filter(f => !f.processed)
+    
+    if (failedFiles.length > 0) {
+      console.warn(`${failedFiles.length} files failed to upscale`)
+    }
+    
+    if (successfulFiles.length === 0) {
+      return {
+        success: false,
+        error: "All files failed to upscale. Please try with smaller images or lower scale factors.",
+      }
+    }
     return {
       success: true,
-      processedFiles,
+      processedFiles: successfulFiles,
     }
   } catch (error) {
+    console.error("Upscaling batch failed:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to upscale images",

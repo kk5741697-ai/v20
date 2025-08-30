@@ -105,21 +105,21 @@ export function ImageToolsLayout({
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
 
-    // Enhanced file size checking with better warnings
-    const largeFiles = Array.from(uploadedFiles).filter(file => file.size > 15 * 1024 * 1024)
-    const veryLargeFiles = Array.from(uploadedFiles).filter(file => file.size > 25 * 1024 * 1024)
+    // Enhanced file size checking with stricter limits
+    const largeFiles = Array.from(uploadedFiles).filter(file => file.size > 8 * 1024 * 1024)
+    const veryLargeFiles = Array.from(uploadedFiles).filter(file => file.size > 15 * 1024 * 1024)
     
     if (largeFiles.length > 0) {
       toast({
         title: "Large files detected", 
-        description: `${largeFiles.length} file(s) are larger than 15MB. Processing will be memory-optimized but may take longer.`,
+        description: `${largeFiles.length} file(s) are larger than 8MB. Processing may be slower and use more memory.`,
       })
     }
     
     if (veryLargeFiles.length > 0) {
       toast({
         title: "Very large files detected",
-        description: `${veryLargeFiles.length} file(s) are larger than 25MB. These will be automatically downscaled for processing to prevent crashes.`,
+        description: `${veryLargeFiles.length} file(s) are larger than 15MB. These may fail to process.`,
         variant: "destructive"
       })
     }
@@ -145,17 +145,28 @@ export function ImageToolsLayout({
         break
       }
 
-      // Warn about very large files that might cause crashes
-      if (file.size > 25 * 1024 * 1024) {
+      // Skip very large files that will cause crashes
+      if (file.size > 15 * 1024 * 1024) {
         toast({
-          title: "Very large file",
-          description: `${file.name} is ${Math.round(file.size / (1024 * 1024))}MB. This may cause performance issues.`,
+          title: "File too large",
+          description: `${file.name} is ${Math.round(file.size / (1024 * 1024))}MB. Skipping to prevent crashes.`,
           variant: "destructive"
         })
+        continue
       }
 
       try {
         const dimensions = await getImageDimensions(file)
+        
+        // Additional dimension safety check
+        if (dimensions.width * dimensions.height > 2048 * 2048) {
+          toast({
+            title: "Image resolution too high",
+            description: `${file.name} has very high resolution. This may cause processing issues.`,
+            variant: "destructive"
+          })
+        }
+        
         const preview = await createImagePreview(file)
         
         const imageFile: ImageFile = {
@@ -249,13 +260,26 @@ export function ImageToolsLayout({
       return
     }
 
+    // Pre-processing safety checks
+    const hasLargeFiles = files.some(f => f.size > 8 * 1024 * 1024)
+    const hasHighResFiles = files.some(f => 
+      f.dimensions && f.dimensions.width * f.dimensions.height > 1536 * 1536
+    )
+    
+    if (hasLargeFiles || hasHighResFiles) {
+      toast({
+        title: "Processing large files",
+        description: "Large files detected. Processing may take longer and use more memory.",
+      })
+    }
     setIsProcessing(true)
     setProcessingProgress(0)
 
     try {
+      // Stagger processing to prevent memory overload
       const progressInterval = setInterval(() => {
-        setProcessingProgress(prev => Math.min(prev + 10, 90))
-      }, 200)
+        setProcessingProgress(prev => Math.min(prev + 8, 85))
+      }, 300)
 
       const result = await processFunction(files, toolOptions)
       
@@ -268,10 +292,18 @@ export function ImageToolsLayout({
           title: "Processing complete",
           description: `${result.processedFiles.length} image${result.processedFiles.length !== 1 ? 's' : ''} processed successfully`
         })
+        
+        // Clean up memory after processing
+        setTimeout(() => {
+          if ('gc' in window && typeof (window as any).gc === 'function') {
+            (window as any).gc()
+          }
+        }, 1000)
       } else {
         throw new Error(result.error || "Processing failed")
       }
     } catch (error) {
+      console.error("Processing failed:", error)
       toast({
         title: "Processing failed",
         description: error instanceof Error ? error.message : "Failed to process images",

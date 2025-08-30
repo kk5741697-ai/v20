@@ -668,6 +668,18 @@ export function PDFToolsLayout({
           {/* Canvas Content */}
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
+
+            {/* Top Ad Banner */}
+            <div className="bg-white border-b">
+              <div className="container mx-auto px-4 py-1 lg:py-2">
+                <AdBanner 
+                  adSlot="tool-header-banner"
+                  adFormat="auto"
+                  className="max-w-6xl mx-auto"
+                />
+              </div>
+            </div>
+              
               <div className="p-6 space-y-4 min-h-[calc(100vh-12rem)]">
                 {files.map((file) => (
                   <Card key={file.id} className="relative">

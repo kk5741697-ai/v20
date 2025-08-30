@@ -28,8 +28,8 @@ export class AdvancedImageProcessor {
   // Advanced upscaling with Real-ESRGAN-like algorithm
   static async upscaleImageAdvanced(file: File, options: AdvancedImageOptions = {}): Promise<Blob> {
     const scaleFactor = Math.min(options.scaleFactor || 2, 4) // Limit to 4x for performance
-    const tileSize = options.tileSize || 512
-    const maxDimensions = options.maxDimensions || { width: 4096, height: 4096 }
+    const tileSize = options.tileSize || 256 // Reduced tile size for stability
+    const maxDimensions = options.maxDimensions || { width: 2048, height: 2048 } // Reduced max dimensions
     
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
@@ -52,7 +52,14 @@ export class AdvancedImageProcessor {
           // Memory optimization for large images
           let workingWidth = img.naturalWidth
           let workingHeight = img.naturalHeight
-          let needsUpscaling = false
+          
+          // Strict memory limits to prevent crashes
+          const maxPixels = 1536 * 1536 // Reduced from 2048x2048
+          if (workingWidth * workingHeight > maxPixels) {
+            const scale = Math.sqrt(maxPixels / (workingWidth * workingHeight))
+            workingWidth = Math.floor(workingWidth * scale)
+            workingHeight = Math.floor(workingHeight * scale)
+          }
           
           // Check if image needs downscaling for processing
           if (workingWidth > maxDimensions.width || workingHeight > maxDimensions.height) {
@@ -62,7 +69,6 @@ export class AdvancedImageProcessor {
             )
             workingWidth = Math.floor(workingWidth * scale)
             workingHeight = Math.floor(workingHeight * scale)
-            needsUpscaling = true
           }
           
           // Create working canvas
@@ -514,8 +520,8 @@ export class AdvancedImageProcessor {
 
   // Advanced background removal with U²Net-like algorithm
   static async removeBackgroundAdvanced(file: File, options: AdvancedImageOptions = {}): Promise<Blob> {
-    // Check file size and implement memory protection
-    const maxSafeSize = 15 * 1024 * 1024 // 15MB limit
+    // Stricter file size limits to prevent crashes
+    const maxSafeSize = 10 * 1024 * 1024 // 10MB limit
     const shouldOptimize = file.size > maxSafeSize
     
     return new Promise((resolve, reject) => {
@@ -542,7 +548,7 @@ export class AdvancedImageProcessor {
           
           // Memory optimization for large images
           if (shouldOptimize) {
-            const maxDimension = 1536 // Reduced for stability
+            const maxDimension = 1024 // Further reduced for stability
             if (workingWidth > maxDimension || workingHeight > maxDimension) {
               const scale = maxDimension / Math.max(workingWidth, workingHeight)
               workingWidth = Math.floor(workingWidth * scale)
@@ -552,34 +558,41 @@ export class AdvancedImageProcessor {
           }
           
           // Create working canvas
-          const workingCanvas = document.createElement("canvas")
-          const workingCtx = workingCanvas.getContext("2d", { alpha: true })!
-          workingCanvas.width = workingWidth
-          workingCanvas.height = workingHeight
+          try {
+            const workingCanvas = document.createElement("canvas")
+            const workingCtx = workingCanvas.getContext("2d", { 
+              alpha: true,
+              willReadFrequently: false 
+            })!
+            workingCanvas.width = workingWidth
+            workingCanvas.height = workingHeight
           
-          workingCtx.imageSmoothingEnabled = true
-          workingCtx.imageSmoothingQuality = "high"
-          workingCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
+            workingCtx.imageSmoothingEnabled = true
+            workingCtx.imageSmoothingQuality = "medium" // Reduced for performance
+            workingCtx.drawImage(img, 0, 0, workingWidth, workingHeight)
           
-          options.progressCallback?.(30)
+            options.progressCallback?.(30)
           
-          // Apply U²Net-like background removal
-          await this.applyU2NetLikeRemoval(workingCanvas, options)
+            // Apply simplified background removal to prevent crashes
+            await this.applySimplifiedBackgroundRemoval(workingCanvas, options)
           
-          options.progressCallback?.(80)
+            options.progressCallback?.(80)
           
-          // Scale back up if we downscaled for processing
-          if (scaledForProcessing) {
-            canvas.width = img.naturalWidth
-            canvas.height = img.naturalHeight
+            // Scale back up if we downscaled for processing
+            if (scaledForProcessing) {
+              canvas.width = Math.min(img.naturalWidth, 2048)
+              canvas.height = Math.min(img.naturalHeight, 2048)
             
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(workingCanvas, 0, 0, img.naturalWidth, img.naturalHeight)
-          } else {
-            canvas.width = workingWidth
-            canvas.height = workingHeight
-            ctx.drawImage(workingCanvas, 0, 0)
+              ctx.imageSmoothingEnabled = true
+              ctx.imageSmoothingQuality = "medium"
+              ctx.drawImage(workingCanvas, 0, 0, canvas.width, canvas.height)
+            } else {
+              canvas.width = workingWidth
+              canvas.height = workingHeight
+              ctx.drawImage(workingCanvas, 0, 0)
+            }
+          } catch (memoryError) {
+            throw new Error("Image too large for processing. Please use a smaller image.")
           }
           
           options.progressCallback?.(100)
@@ -606,8 +619,8 @@ export class AdvancedImageProcessor {
     })
   }
 
-  // U²Net-like background removal algorithm
-  private static async applyU2NetLikeRemoval(
+  // Simplified background removal to prevent crashes
+  private static async applySimplifiedBackgroundRemoval(
     canvas: HTMLCanvasElement,
     options: AdvancedImageOptions
   ): Promise<void> {
@@ -616,497 +629,134 @@ export class AdvancedImageProcessor {
     const data = imageData.data
     const { width, height } = canvas
     
-    options.progressCallback?.(40)
-    
-    // Stage 1: Multi-scale edge detection (simulating U²Net's encoder)
-    const edgeMaps = await this.computeMultiScaleEdges(data, width, height)
-    
-    options.progressCallback?.(50)
-    
-    // Stage 2: Semantic segmentation (simulating U²Net's decoder)
-    const segmentationMask = await this.computeSemanticSegmentation(data, width, height, edgeMaps)
-    
-    options.progressCallback?.(60)
-    
-    // Stage 3: Refinement with attention mechanism
-    const refinedMask = await this.refineSegmentationMask(data, width, height, segmentationMask, options)
-    
-    options.progressCallback?.(70)
-    
-    // Stage 4: Apply mask with advanced blending
-    this.applyAdvancedMask(data, width, height, refinedMask, options)
+    try {
+      options.progressCallback?.(40, "Detecting edges...")
+      
+      // Simplified edge detection
+      const edges = this.simpleEdgeDetection(data, width, height)
+      
+      options.progressCallback?.(60, "Creating mask...")
+      
+      // Simple background detection
+      const backgroundMask = this.simpleBackgroundDetection(data, width, height, edges)
+      
+      options.progressCallback?.(80, "Applying transparency...")
+      
+      // Apply mask
+      this.applySimpleMask(data, width, height, backgroundMask, options)
+      
+    } catch (error) {
+      console.error("Background removal failed:", error)
+      throw new Error("Processing failed. Please try with a smaller image.")
+    }
     
     ctx.putImageData(imageData, 0, 0)
   }
 
-  // Multi-scale edge detection (simulating U²Net encoder)
-  private static async computeMultiScaleEdges(
+  // Simple edge detection to prevent memory issues
+  private static simpleEdgeDetection(
     data: Uint8ClampedArray,
     width: number,
     height: number
-  ): Promise<Uint8Array[]> {
-    const edgeMaps: Uint8Array[] = []
+  ): Uint8Array {
+    const edges = new Uint8Array(width * height)
     
-    // Compute edges at different scales
-    for (let scale = 1; scale <= 4; scale++) {
-      const edgeMap = new Uint8Array(width * height)
-      const kernelSize = scale * 2 + 1
-      
-      for (let y = kernelSize; y < height - kernelSize; y++) {
-        for (let x = kernelSize; x < width - kernelSize; x++) {
-          const idx = y * width + x
-          
-          // Sobel edge detection at current scale
-          let gx = 0, gy = 0
-          
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const sampleIdx = ((y + dy * scale) * width + (x + dx * scale)) * 4
-              const intensity = (data[sampleIdx] + data[sampleIdx + 1] + data[sampleIdx + 2]) / 3
-              
-              // Sobel kernels
-              const sobelX = dx * (dy === 0 ? 2 : 1)
-              const sobelY = dy * (dx === 0 ? 2 : 1)
-              
-              gx += intensity * sobelX
-              gy += intensity * sobelY
-            }
+    // Simple Sobel edge detection
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        
+        let gx = 0, gy = 0
+        
+        // 3x3 Sobel kernels
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const pixelIdx = ((y + dy) * width + (x + dx)) * 4
+            const intensity = (data[pixelIdx] + data[pixelIdx + 1] + data[pixelIdx + 2]) / 3
+            
+            // Sobel X: [-1,0,1; -2,0,2; -1,0,1]
+            const sobelX = dx * (dy === 0 ? 2 : 1)
+            // Sobel Y: [-1,-2,-1; 0,0,0; 1,2,1]
+            const sobelY = dy * (dx === 0 ? 2 : 1)
+            
+            gx += intensity * sobelX
+            gy += intensity * sobelY
           }
-          
-          const magnitude = Math.sqrt(gx * gx + gy * gy)
-          edgeMap[idx] = Math.min(255, magnitude)
         }
+        
+        const magnitude = Math.sqrt(gx * gx + gy * gy)
+        edges[idx] = Math.min(255, magnitude)
       }
-      
-      edgeMaps.push(edgeMap)
     }
     
-    return edgeMaps
+    return edges
   }
 
-  // Semantic segmentation (simulating U²Net decoder)
-  private static async computeSemanticSegmentation(
+  // Simple background detection
+  private static simpleBackgroundDetection(
     data: Uint8ClampedArray,
     width: number,
     height: number,
-    edgeMaps: Uint8Array[]
+    edges: Uint8Array
   ): Promise<Uint8Array> {
-    const segmentationMask = new Uint8Array(width * height)
+    const backgroundMask = new Uint8Array(width * height)
+    const visited = new Uint8Array(width * height)
+    const queue: Array<[number, number]> = []
     
-    // Combine multi-scale features
-    for (let i = 0; i < width * height; i++) {
-      let edgeScore = 0
-      edgeMaps.forEach((edgeMap, scale) => {
-        edgeScore += edgeMap[i] * (1 / (scale + 1)) // Weight by scale
-      })
-      
-      // Color-based segmentation
-      const pixelIdx = i * 4
-      const r = data[pixelIdx]
-      const g = data[pixelIdx + 1]
-      const b = data[pixelIdx + 2]
-      
-      // Advanced background detection using multiple criteria
-      const colorScore = this.computeBackgroundColorScore(r, g, b, data, width, height, i)
-      const positionScore = this.computePositionScore(i, width, height)
-      const textureScore = this.computeTextureScore(data, width, height, i)
-      
-      // Combine scores (simulating U²Net's feature fusion)
-      const backgroundProbability = (
-        colorScore * 0.4 +
-        positionScore * 0.2 +
-        textureScore * 0.2 +
-        (1 - edgeScore / 255) * 0.2
-      )
-      
-      segmentationMask[i] = backgroundProbability > 0.5 ? 255 : 0
-    }
-    
-    return segmentationMask
-  }
-
-  // Compute background color score
-  private static computeBackgroundColorScore(
-    r: number, g: number, b: number,
-    data: Uint8ClampedArray,
-    width: number, height: number,
-    pixelIndex: number
-  ): number {
-    // Sample edge pixels to determine background color
-    const edgePixels = this.sampleEdgePixels(data, width, height, 50)
-    
-    let minDistance = Infinity
-    edgePixels.forEach(([er, eg, eb]) => {
-      const distance = Math.sqrt(
-        Math.pow(r - er, 2) * 0.3 +  // Red weight
-        Math.pow(g - eg, 2) * 0.59 + // Green weight (human perception)
-        Math.pow(b - eb, 2) * 0.11   // Blue weight
-      )
-      minDistance = Math.min(minDistance, distance)
-    })
-    
-    return Math.max(0, 1 - minDistance / 100)
-  }
-
-  // Compute position-based score (edges more likely to be background)
-  private static computePositionScore(pixelIndex: number, width: number, height: number): number {
-    const x = pixelIndex % width
-    const y = Math.floor(pixelIndex / width)
-    
-    const distanceFromEdge = Math.min(x, y, width - x - 1, height - y - 1)
-    const maxDistance = Math.min(width, height) / 2
-    
-    return Math.max(0, 1 - distanceFromEdge / maxDistance)
-  }
-
-  // Compute texture score (uniform areas more likely to be background)
-  private static computeTextureScore(
-    data: Uint8ClampedArray,
-    width: number, height: number,
-    pixelIndex: number
-  ): number {
-    const x = pixelIndex % width
-    const y = Math.floor(pixelIndex / width)
-    const radius = 5
-    
-    if (x < radius || y < radius || x >= width - radius || y >= height - radius) {
-      return 1 // Edge pixels
-    }
-    
-    const centerIdx = pixelIndex * 4
-    const centerR = data[centerIdx]
-    const centerG = data[centerIdx + 1]
-    const centerB = data[centerIdx + 2]
-    
-    let variance = 0
-    let count = 0
-    
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        const sampleIdx = ((y + dy) * width + (x + dx)) * 4
-        const dr = data[sampleIdx] - centerR
-        const dg = data[sampleIdx + 1] - centerG
-        const db = data[sampleIdx + 2] - centerB
-        
-        variance += dr * dr + dg * dg + db * db
-        count++
-      }
-    }
-    
-    variance /= count
-    return Math.max(0, 1 - variance / 10000) // Normalize variance
-  }
-
-  // Sample edge pixels for background color detection
-  private static sampleEdgePixels(
-    data: Uint8ClampedArray,
-    width: number, height: number,
-    sampleCount: number
-  ): number[][] {
-    const samples: number[][] = []
-    
-    // Sample from all four edges
-    const edgePositions = [
-      // Top edge
-      ...Array.from({ length: sampleCount / 4 }, (_, i) => 
-        [(i * width) / (sampleCount / 4), 0]
-      ),
-      // Bottom edge
-      ...Array.from({ length: sampleCount / 4 }, (_, i) => 
-        [(i * width) / (sampleCount / 4), height - 1]
-      ),
-      // Left edge
-      ...Array.from({ length: sampleCount / 4 }, (_, i) => 
-        [0, (i * height) / (sampleCount / 4)]
-      ),
-      // Right edge
-      ...Array.from({ length: sampleCount / 4 }, (_, i) => 
-        [width - 1, (i * height) / (sampleCount / 4)]
-      ),
+    // Start flood fill from edges
+    const startPoints = [
+      [0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1],
+      [Math.floor(width / 2), 0], [Math.floor(width / 2), height - 1],
+      [0, Math.floor(height / 2)], [width - 1, Math.floor(height / 2)]
     ]
     
-    edgePositions.forEach(([x, y]) => {
-      const pixelIdx = (Math.floor(y) * width + Math.floor(x)) * 4
-      if (pixelIdx < data.length - 3) {
-        samples.push([data[pixelIdx], data[pixelIdx + 1], data[pixelIdx + 2]])
+    startPoints.forEach(([x, y]) => {
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        queue.push([x, y])
       }
     })
     
-    return samples
-  }
-
-  // Refine segmentation mask with attention mechanism
-  private static async refineSegmentationMask(
-    data: Uint8ClampedArray,
-    width: number, height: number,
-    mask: Uint8Array,
-    options: AdvancedImageOptions
-  ): Promise<Uint8Array> {
-    const refined = new Uint8Array(mask)
-    const kernelSize = 7
-    
-    // Apply morphological operations
-    this.applyMorphologicalClosing(refined, width, height, 3)
-    this.applyMorphologicalOpening(refined, width, height, 2)
-    
-    // Apply guided filtering (edge-preserving smoothing)
-    this.applyGuidedFilter(data, refined, width, height, kernelSize, 0.1)
-    
-    // Apply conditional random field-like refinement
-    this.applyCRFRefinement(data, refined, width, height, options)
-    
-    return refined
-  }
-
-  // Morphological closing operation
-  private static applyMorphologicalClosing(
-    mask: Uint8Array,
-    width: number, height: number,
-    kernelSize: number
-  ): void {
-    // Dilation followed by erosion
-    this.applyDilation(mask, width, height, kernelSize)
-    this.applyErosion(mask, width, height, kernelSize)
-  }
-
-  // Morphological opening operation
-  private static applyMorphologicalOpening(
-    mask: Uint8Array,
-    width: number, height: number,
-    kernelSize: number
-  ): void {
-    // Erosion followed by dilation
-    this.applyErosion(mask, width, height, kernelSize)
-    this.applyDilation(mask, width, height, kernelSize)
-  }
-
-  // Dilation operation
-  private static applyDilation(
-    mask: Uint8Array,
-    width: number, height: number,
-    kernelSize: number
-  ): void {
-    const dilated = new Uint8Array(mask)
-    const radius = Math.floor(kernelSize / 2)
-    
-    for (let y = radius; y < height - radius; y++) {
-      for (let x = radius; x < width - radius; x++) {
-        const centerIdx = y * width + x
-        
-        let maxValue = 0
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const sampleIdx = (y + dy) * width + (x + dx)
-            maxValue = Math.max(maxValue, mask[sampleIdx])
-          }
-        }
-        
-        dilated[centerIdx] = maxValue
-      }
-    }
-    
-    // Copy back
-    for (let i = 0; i < mask.length; i++) {
-      mask[i] = dilated[i]
-    }
-  }
-
-  // Erosion operation
-  private static applyErosion(
-    mask: Uint8Array,
-    width: number, height: number,
-    kernelSize: number
-  ): void {
-    const eroded = new Uint8Array(mask)
-    const radius = Math.floor(kernelSize / 2)
-    
-    for (let y = radius; y < height - radius; y++) {
-      for (let x = radius; x < width - radius; x++) {
-        const centerIdx = y * width + x
-        
-        let minValue = 255
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const sampleIdx = (y + dy) * width + (x + dx)
-            minValue = Math.min(minValue, mask[sampleIdx])
-          }
-        }
-        
-        eroded[centerIdx] = minValue
-      }
-    }
-    
-    // Copy back
-    for (let i = 0; i < mask.length; i++) {
-      mask[i] = eroded[i]
-    }
-  }
-
-  // Guided filter for edge-preserving smoothing
-  private static applyGuidedFilter(
-    guide: Uint8ClampedArray,
-    mask: Uint8Array,
-    width: number, height: number,
-    kernelSize: number,
-    epsilon: number
-  ): void {
-    const filtered = new Uint8Array(mask)
-    const radius = Math.floor(kernelSize / 2)
-    
-    for (let y = radius; y < height - radius; y++) {
-      for (let x = radius; x < width - radius; x++) {
-        const centerIdx = y * width + x
-        
-        // Compute local statistics
-        let meanGuide = 0, meanMask = 0, count = 0
-        
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const sampleIdx = (y + dy) * width + (x + dx)
-            const guideIdx = sampleIdx * 4
-            
-            const guideIntensity = (guide[guideIdx] + guide[guideIdx + 1] + guide[guideIdx + 2]) / 3
-            meanGuide += guideIntensity
-            meanMask += mask[sampleIdx]
-            count++
-          }
-        }
-        
-        meanGuide /= count
-        meanMask /= count
-        
-        // Compute covariance and variance
-        let covariance = 0, variance = 0
-        
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const sampleIdx = (y + dy) * width + (x + dx)
-            const guideIdx = sampleIdx * 4
-            
-            const guideIntensity = (guide[guideIdx] + guide[guideIdx + 1] + guide[guideIdx + 2]) / 3
-            const guideDiff = guideIntensity - meanGuide
-            const maskDiff = mask[sampleIdx] - meanMask
-            
-            covariance += guideDiff * maskDiff
-            variance += guideDiff * guideDiff
-          }
-        }
-        
-        covariance /= count
-        variance /= count
-        
-        // Guided filter coefficients
-        const a = covariance / (variance + epsilon)
-        const b = meanMask - a * meanGuide
-        
-        // Apply filter
-        const guideIntensity = (guide[centerIdx * 4] + guide[centerIdx * 4 + 1] + guide[centerIdx * 4 + 2]) / 3
-        filtered[centerIdx] = Math.max(0, Math.min(255, a * guideIntensity + b))
-      }
-    }
-    
-    // Copy back
-    for (let i = 0; i < mask.length; i++) {
-      mask[i] = filtered[i]
-    }
-  }
-
-  // CRF-like refinement for better boundaries
-  private static applyCRFRefinement(
-    data: Uint8ClampedArray,
-    mask: Uint8Array,
-    width: number, height: number,
-    options: AdvancedImageOptions
-  ): void {
-    const refined = new Uint8Array(mask)
-    const iterations = 3
-    const colorSigma = 20
-    const spatialSigma = 3
-    
-    for (let iter = 0; iter < iterations; iter++) {
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          const centerIdx = y * width + x
-          const centerPixelIdx = centerIdx * 4
-          
-          let weightSum = 0
-          let valueSum = 0
-          
-          // 8-connected neighborhood
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const neighborIdx = (y + dy) * width + (x + dx)
-              const neighborPixelIdx = neighborIdx * 4
-              
-              // Color similarity
-              const colorDist = Math.sqrt(
-                Math.pow(data[centerPixelIdx] - data[neighborPixelIdx], 2) +
-                Math.pow(data[centerPixelIdx + 1] - data[neighborPixelIdx + 1], 2) +
-                Math.pow(data[centerPixelIdx + 2] - data[neighborPixelIdx + 2], 2)
-              )
-              
-              // Spatial distance
-              const spatialDist = Math.sqrt(dx * dx + dy * dy)
-              
-              // Combined weight
-              const weight = Math.exp(-colorDist / colorSigma - spatialDist / spatialSigma)
-              
-              weightSum += weight
-              valueSum += mask[neighborIdx] * weight
-            }
-          }
-          
-          refined[centerIdx] = Math.round(valueSum / weightSum)
-        }
-      }
+    while (queue.length > 0) {
+      const [x, y] = queue.shift()!
+      const idx = y * width + x
       
-      // Copy refined mask back
-      for (let i = 0; i < mask.length; i++) {
-        mask[i] = refined[i]
-      }
+      if (visited[idx] || edges[idx] > 50) continue
+      
+      visited[idx] = 1
+      backgroundMask[idx] = 1
+      
+      // Add 4-connected neighbors
+      const neighbors = [[x+1,y], [x-1,y], [x,y+1], [x,y-1]]
+      neighbors.forEach(([nx, ny]) => {
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const nIdx = ny * width + nx
+          if (!visited[nIdx] && edges[nIdx] <= 50) {
+            queue.push([nx, ny])
+          }
+        }
+      })
     }
+    
+    return backgroundMask
   }
 
-  // Apply advanced mask with feathering and edge preservation
-  private static applyAdvancedMask(
+  // Simple mask application
+  private static applySimpleMask(
     data: Uint8ClampedArray,
-    width: number, height: number,
-    mask: Uint8Array,
+    width: number,
+    height: number,
+    backgroundMask: Uint8Array,
     options: AdvancedImageOptions
   ): void {
-    const featherRadius = options.featherEdges !== false ? 8 : 0
-    
-    for (let i = 0; i < mask.length; i++) {
+    for (let i = 0; i < width * height; i++) {
       const pixelIdx = i * 4
-      let alpha = 255 - mask[i] // Invert mask (0 = background, 255 = foreground)
+      const isBackground = backgroundMask[i]
       
-      if (featherRadius > 0 && alpha < 255 && alpha > 0) {
-        // Apply feathering
-        const x = i % width
-        const y = Math.floor(i / width)
-        
-        let minDistanceToForeground = featherRadius
-        
-        for (let dy = -featherRadius; dy <= featherRadius; dy++) {
-          for (let dx = -featherRadius; dx <= featherRadius; dx++) {
-            const nx = x + dx
-            const ny = y + dy
-            
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              const neighborIdx = ny * width + nx
-              if (mask[neighborIdx] < 128) { // Foreground pixel
-                const distance = Math.sqrt(dx * dx + dy * dy)
-                minDistanceToForeground = Math.min(minDistanceToForeground, distance)
-              }
-            }
-          }
-        }
-        
-        const featherAlpha = Math.max(0, 1 - minDistanceToForeground / featherRadius)
-        alpha = Math.round(alpha * (1 - featherAlpha) + 255 * featherAlpha)
+      if (isBackground) {
+        data[pixelIdx + 3] = 0 // Make transparent
+      } else if (options.preserveDetails !== false) {
+        data[pixelIdx + 3] = Math.min(255, data[pixelIdx + 3]) // Keep original alpha
       }
-      
-      data[pixelIdx + 3] = alpha
     }
   }
 

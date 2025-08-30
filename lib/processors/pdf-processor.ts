@@ -592,7 +592,6 @@ export class PDFProcessor {
     }
   }
 
-        filename: "organized_pdfs.zip",
   static async pdfToWord(file: File, options: PDFProcessingOptions = {}): Promise<Uint8Array> {
     try {
       const arrayBuffer = await file.arrayBuffer()

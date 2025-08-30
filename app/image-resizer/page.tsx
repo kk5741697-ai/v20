@@ -4,6 +4,11 @@ import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Maximize } from "lucide-react"
 import { ImageProcessor } from "@/lib/processors/image-processor"
 
+export const metadata = {
+  title: "Image Resizer",
+  description: "Define your dimensions by percent or pixel, and resize your images with presets."
+}
+
 const resizeOptions = [
   {
     key: "width",

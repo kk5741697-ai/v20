@@ -21,7 +21,10 @@ const poppins = Poppins({
 })
 
 export const metadata: Metadata = {
-  title: "PixoraTools - Every tool you could want to edit images in bulk",
+  title: {
+    template: "%s - PixoraTools",
+    default: "PixoraTools - Every tool you could want to edit images in bulk"
+  },
   description:
     "Your online photo editor is here and forever free! Compress, resize, crop, convert images and more with 300+ professional tools.",
   generator: "PixoraTools",

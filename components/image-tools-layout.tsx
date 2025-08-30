@@ -503,17 +503,36 @@ export function ImageToolsLayout({
           </Button>
 
           {files.some(f => f.processed) && (
-            <Button 
-              onClick={() => {
-                downloadAll()
-                setIsMobileSidebarOpen(false)
-              }}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
-              size="lg"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download All
-            </Button>
+            <>
+              {files.filter(f => f.processed).length === 1 ? (
+                <Button 
+                  onClick={() => {
+                    const processedFile = files.find(f => f.processed)
+                    if (processedFile) {
+                      downloadFile(processedFile)
+                      setIsMobileSidebarOpen(false)
+                    }
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                  size="lg"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Image
+                </Button>
+              ) : (
+                <Button 
+                  onClick={() => {
+                    downloadAll()
+                    setIsMobileSidebarOpen(false)
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                  size="lg"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP ({files.filter(f => f.processed).length} files)
+                </Button>
+              )}
+            </>
           )}
         </div>
       </SheetContent>
@@ -988,11 +1007,6 @@ export function ImageToolsLayout({
                 )}
 
                 {/* Sidebar Ad */}
-                <AdBanner 
-                  adSlot="image-sidebar"
-                  adFormat="auto"
-                  className="w-full"
-                />
               </div>
             </ScrollArea>
           </div>
@@ -1028,14 +1042,30 @@ export function ImageToolsLayout({
             </Button>
 
             {files.some(f => f.processed) && (
-              <Button 
-                onClick={downloadAll}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
-                size="lg"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download All
-              </Button>
+              <>
+                {files.filter(f => f.processed).length === 1 ? (
+                  <Button 
+                    onClick={() => {
+                      const processedFile = files.find(f => f.processed)
+                      if (processedFile) downloadFile(processedFile)
+                    }}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                    size="lg"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Image
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={downloadAll}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                    size="lg"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download ZIP ({files.filter(f => f.processed).length} files)
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>

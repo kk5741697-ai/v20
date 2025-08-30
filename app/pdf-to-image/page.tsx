@@ -11,11 +11,11 @@ const convertOptions = [
     type: "select" as const,
     defaultValue: "jpg",
     selectOptions: [
-      { value: "jpg", label: "JPEG" },
+      { value: "jpeg", label: "JPEG" },
       { value: "png", label: "PNG" },
       { value: "webp", label: "WebP" },
-      { value: "tiff", label: "TIFF" },
     ],
+    section: "Output",
   },
   {
     key: "resolution",
@@ -28,15 +28,7 @@ const convertOptions = [
       { value: "300", label: "300 DPI (Print)" },
       { value: "600", label: "600 DPI (High Quality)" },
     ],
-  },
-  {
-    key: "imageQuality",
-    label: "Image Quality",
-    type: "slider" as const,
-    defaultValue: 90,
-    min: 10,
-    max: 100,
-    step: 5,
+    section: "Quality",
   },
   {
     key: "colorMode",
@@ -48,6 +40,7 @@ const convertOptions = [
       { value: "grayscale", label: "Grayscale" },
       { value: "monochrome", label: "Black & White" },
     ],
+    section: "Quality",
   },
 ]
 
@@ -63,28 +56,49 @@ async function convertPDFToImage(files: any[], options: any) {
     const conversionOptions = {
       outputFormat: options.outputFormat,
       dpi: Number.parseInt(options.resolution),
-      quality: options.imageQuality,
       colorMode: options.colorMode,
     }
 
-    const JSZip = (await import("jszip")).default
-    const zip = new JSZip()
-
-    for (const file of files) {
-      const images = await PDFProcessor.pdfToImages(file.file, conversionOptions)
-
+    if (files.length === 1) {
+      // Single file - create ZIP with all page images
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
+      
+      const images = await PDFProcessor.pdfToImages(files[0].file, conversionOptions)
+      
       images.forEach((imageBlob, pageIndex) => {
-        const filename = `${file.name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
+        const filename = `${files[0].name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
         zip.file(filename, imageBlob)
       })
-    }
+      
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const downloadUrl = URL.createObjectURL(zipBlob)
+      
+      return {
+        success: true,
+        downloadUrl,
+      }
+    } else {
+      // Multiple files - create ZIP with all images
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
 
-    const zipBlob = await zip.generateAsync({ type: "blob" })
-    const downloadUrl = URL.createObjectURL(zipBlob)
+      for (const file of files) {
+        const images = await PDFProcessor.pdfToImages(file.file, conversionOptions)
 
-    return {
-      success: true,
-      downloadUrl,
+        images.forEach((imageBlob, pageIndex) => {
+          const filename = `${file.name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
+          zip.file(filename, imageBlob)
+        })
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const downloadUrl = URL.createObjectURL(zipBlob)
+
+      return {
+        success: true,
+        downloadUrl,
+      }
     }
   } catch (error) {
     return {

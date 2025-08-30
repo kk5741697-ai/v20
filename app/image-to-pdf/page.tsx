@@ -90,7 +90,7 @@ export default function ImageToPDFPage() {
   return (
     <PDFToolsLayout
       title="Image to PDF Converter"
-      description="Convert multiple images into a single PDF document with custom page layouts, margins, and sizing options."
+      description="Convert multiple images (JPG, PNG, WebP) into a single PDF document with custom page layouts, margins, and sizing options."
       icon={FileImage}
       toolType="convert"
       processFunction={convertImagesToPDF}

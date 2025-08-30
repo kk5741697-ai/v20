@@ -13,7 +13,6 @@ const filterOptions = [
     min: 0,
     max: 200,
     step: 5,
-    section: "Adjustments",
   },
   {
     key: "contrast",
@@ -23,7 +22,6 @@ const filterOptions = [
     min: 0,
     max: 200,
     step: 5,
-    section: "Adjustments",
   },
   {
     key: "saturation",
@@ -33,7 +31,6 @@ const filterOptions = [
     min: 0,
     max: 200,
     step: 5,
-    section: "Adjustments",
   },
   {
     key: "blur",
@@ -43,43 +40,18 @@ const filterOptions = [
     min: 0,
     max: 20,
     step: 1,
-    section: "Effects",
   },
   {
     key: "sepia",
     label: "Sepia Effect",
     type: "checkbox" as const,
     defaultValue: false,
-    section: "Effects",
   },
   {
     key: "grayscale",
     label: "Grayscale",
     type: "checkbox" as const,
     defaultValue: false,
-    section: "Effects",
-  },
-  {
-    key: "outputFormat",
-    label: "Output Format",
-    type: "select" as const,
-    defaultValue: "png",
-    selectOptions: [
-      { value: "png", label: "PNG" },
-      { value: "jpeg", label: "JPEG" },
-      { value: "webp", label: "WebP" },
-    ],
-    section: "Output",
-  },
-  {
-    key: "quality",
-    label: "Quality",
-    type: "slider" as const,
-    defaultValue: 95,
-    min: 10,
-    max: 100,
-    step: 5,
-    section: "Output",
   },
 ]
 
@@ -103,8 +75,7 @@ async function applyFilters(files: any[], options: any) {
             sepia: Boolean(options.sepia),
             grayscale: Boolean(options.grayscale),
           },
-          outputFormat: options.outputFormat || "png",
-          quality: Math.max(10, Math.min(100, options.quality || 95))
+          outputFormat: "png",
         }
         
         const processedBlob = await ImageProcessor.applyFilters(
@@ -114,9 +85,8 @@ async function applyFilters(files: any[], options: any) {
 
         const processedUrl = URL.createObjectURL(processedBlob)
         
-        const outputFormat = options.outputFormat || "png"
         const baseName = file.name.split(".")[0]
-        const newName = `${baseName}_filtered.${outputFormat}`
+        const newName = `${baseName}_filtered.png`
 
         return {
           ...file,
@@ -143,17 +113,101 @@ async function applyFilters(files: any[], options: any) {
 
 export default function ImageFiltersPage() {
   return (
-    <ImageToolsLayout
-      title="Image Filters"
-      description="Apply professional filters and adjustments to your images. Adjust brightness, contrast, saturation, and add artistic effects."
-      icon={Palette}
-      toolType="filters"
-      processFunction={applyFilters}
-      options={filterOptions}
-      maxFiles={15}
-      allowBatchProcessing={true}
-      supportedFormats={["image/jpeg", "image/png", "image/webp"]}
-      outputFormats={["png", "jpeg", "webp"]}
-    />
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+            mobileOptimized={true}
+          />
+        </div>
+      </div>
+
+      {/* Single Image Filter Interface */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center space-x-2 mb-4">
+            <Palette className="h-8 w-8 text-purple-600" />
+            <h1 className="text-3xl font-heading font-bold text-foreground">Image Filters</h1>
+          </div>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Apply professional filters and adjustments to your image. Adjust brightness, contrast, saturation, and add artistic effects.
+          </p>
+        </div>
+
+        {/* Single Image Filter Tool */}
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Main Canvas - Full Screen Preview */}
+            <div className="lg:col-span-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Image Preview</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <Palette className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                      <p className="text-gray-500">Upload an image to start applying filters</p>
+                      <Button className="mt-4">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Choose Image
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filter Controls */}
+            <div className="lg:col-span-1">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filters</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {filterOptions.map((option) => (
+                    <div key={option.key} className="space-y-2">
+                      <Label className="text-sm font-medium">{option.label}</Label>
+                      
+                      {option.type === "slider" && (
+                        <div className="space-y-2">
+                          <Slider
+                            value={[option.defaultValue]}
+                            min={option.min}
+                            max={option.max}
+                            step={option.step}
+                          />
+                          <div className="text-xs text-center text-gray-500">
+                            {option.defaultValue}
+                          </div>
+                        </div>
+                      )}
+
+                      {option.type === "checkbox" && (
+                        <div className="flex items-center space-x-2">
+                          <Checkbox defaultChecked={option.defaultValue} />
+                          <span className="text-sm">{option.label}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                    <Palette className="h-4 w-4 mr-2" />
+                    Apply Filters
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+      <Footer />
+    </div>
   )
 }

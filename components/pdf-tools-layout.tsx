@@ -222,28 +222,15 @@ export function PDFToolsLayout({
       setProcessingProgress(100)
       
       if (result.success && result.downloadUrl) {
-        // Determine download filename based on result type
-        let filename: string
-        let isZip = false
-        
-        if (toolType === 'merge' || (allowPageSelection && selectedPages.length === 1)) {
-          // Single PDF output
-          filename = `${title.toLowerCase().replace(/\s+/g, '-')}-result.pdf`
-        } else {
-          // Multiple files - ZIP
-          filename = `${title.toLowerCase().replace(/\s+/g, '-')}-results.zip`
-          isZip = true
-        }
-        
         // Auto-download the result
         const link = document.createElement("a")
         link.href = result.downloadUrl
-        link.download = filename
+        link.download = "" // Let browser determine filename
         link.click()
         
         toast({
           title: "Processing complete",
-          description: isZip ? "ZIP file with results is downloading" : "PDF file is downloading"
+          description: "File is downloading"
         })
       } else {
         throw new Error(result.error || "Processing failed")

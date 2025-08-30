@@ -67,17 +67,43 @@ async function splitPDF(files: any[], options: any) {
 
     const file = files[0]
     
-    // Enhanced options handling for different split modes
-    const processOptions = {
-      ...options,
-      extractMode: options.splitMode === "pages" ? "pages" : 
-                   options.splitMode === "size" ? "size" : "range"
+    // Get selected pages from the UI
+    const selectedPages = options.selectedPages || []
+    
+    if (selectedPages.length === 0) {
+      return {
+        success: false,
+        error: "Please select at least one page to extract",
+      }
     }
     
-    const splitResults = await PDFProcessor.splitPDF(file.originalFile || file.file, [], processOptions)
+    // Convert selected page keys to page numbers
+    const pageNumbers = selectedPages
+      .map((pageKey: string) => {
+        const parts = pageKey.split('-')
+        return parseInt(parts[parts.length - 1])
+      })
+      .filter((num: number) => !isNaN(num))
+      .sort((a: number, b: number) => a - b)
+    
+    if (pageNumbers.length === 0) {
+      return {
+        success: false,
+        error: "No valid pages selected",
+      }
+    }
+    
+    // Create page ranges from selected pages
+    const pageRanges = pageNumbers.map(pageNum => ({ from: pageNum, to: pageNum }))
+    
+    const splitResults = await PDFProcessor.splitPDF(
+      file.originalFile || file.file, 
+      pageRanges, 
+      { ...options, extractMode: "pages" }
+    )
 
     // Handle single file vs multiple files download logic
-    if (splitResults.length === 1) {
+    if (splitResults.length === 1 && !options.mergeRanges) {
       // Single file - direct download
       const blob = new Blob([splitResults[0]], { type: "application/pdf" })
       const downloadUrl = URL.createObjectURL(blob)
@@ -109,18 +135,11 @@ async function splitPDF(files: any[], options: any) {
       const JSZip = (await import("jszip")).default
       const zip = new JSZip()
       
-      if (processOptions.extractMode === "pages" && options.selectedPages) {
-        splitResults.forEach((pdfBytes, index) => {
-          const pageNum = options.selectedPages[index]?.split('-').pop()
-          const filename = `${file.name.replace(".pdf", "")}_page_${pageNum || index + 1}.pdf`
-          zip.file(filename, pdfBytes)
-        })
-      } else {
-        splitResults.forEach((pdfBytes, index) => {
-          const filename = `${file.name.replace(".pdf", "")}_part_${index + 1}.pdf`
-          zip.file(filename, pdfBytes)
-        })
-      }
+      splitResults.forEach((pdfBytes, index) => {
+        const pageNum = pageNumbers[index]
+        const filename = `${file.name.replace(".pdf", "")}_page_${pageNum}.pdf`
+        zip.file(filename, pdfBytes)
+      })
 
       const zipBlob = await zip.generateAsync({ 
         type: "blob",

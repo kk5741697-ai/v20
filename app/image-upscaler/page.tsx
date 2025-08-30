@@ -165,17 +165,121 @@ async function upscaleImages(files: any[], options: any) {
 
 export default function ImageUpscalerPage() {
   return (
-    <ImageToolsLayout
-      title="Upscale Image"
-      description="Enlarge images with AI-enhanced quality. Increase resolution while preserving details and reducing artifacts."
-      icon={Zap}
-      toolType="resize"
-      processFunction={upscaleImages}
-      options={upscaleOptions}
-      maxFiles={10}
-      allowBatchProcessing={true}
-      supportedFormats={["image/jpeg", "image/png", "image/webp"]}
-      outputFormats={["png", "jpeg", "webp"]}
-    />
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+            mobileOptimized={true}
+          />
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center space-x-2 mb-4">
+            <Zap className="h-8 w-8 text-blue-600" />
+            <h1 className="text-3xl font-heading font-bold text-foreground">Upscale Image</h1>
+          </div>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Enlarge images using advanced interpolation algorithms. Increase resolution while preserving details and reducing artifacts.
+          </p>
+        </div>
+
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Before/After Preview */}
+            <div className="lg:col-span-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Before & After Comparison</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Original</Label>
+                      <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center border">
+                        <div className="text-center">
+                          <Zap className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                          <p className="text-gray-500 text-sm">Upload image to preview</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Upscaled</Label>
+                      <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center border">
+                        <div className="text-center">
+                          <Zap className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                          <p className="text-gray-500 text-sm">Upscaled result will appear here</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Upscale Controls */}
+            <div className="lg:col-span-1">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Upscale Settings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {upscaleOptions.map((option) => (
+                    <div key={option.key} className="space-y-2">
+                      <Label className="text-sm font-medium">{option.label}</Label>
+                      
+                      {option.type === "select" && (
+                        <Select defaultValue={option.defaultValue}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {option.selectOptions?.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                      {option.type === "checkbox" && (
+                        <div className="flex items-center space-x-2">
+                          <Checkbox defaultChecked={option.defaultValue} />
+                          <span className="text-sm">{option.label}</span>
+                        </div>
+                      )}
+                          </SelectContent>
+                      {option.type === "slider" && (
+                        <div className="space-y-2">
+                          <Slider
+                            defaultValue={[option.defaultValue]}
+                            min={option.min}
+                            max={option.max}
+                            step={option.step}
+                          />
+                          <div className="text-xs text-center text-gray-500">
+                            {option.defaultValue}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                        </Select>
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Upscale Image
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+                      )}
+      <Footer />
+    </div>
   )
 }

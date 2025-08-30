@@ -70,9 +70,7 @@ async function protectPDF(files: any[], options: any) {
       }
     }
 
-    const password = options.userPassword || options.ownerPassword
     const permissions = []
-
     if (options.allowPrinting) permissions.push("print")
     if (options.allowCopying) permissions.push("copy")
     if (options.allowModifying) permissions.push("modify")
@@ -80,7 +78,11 @@ async function protectPDF(files: any[], options: any) {
 
     if (files.length === 1) {
       // Single file protection
-      const protectedBytes = await PDFProcessor.addPasswordProtection(files[0].file, password, permissions)
+      const protectedBytes = await PDFProcessor.addPasswordProtection(
+        files[0].originalFile || files[0].file, 
+        options.userPassword || options.ownerPassword, 
+        permissions
+      )
       const blob = new Blob([protectedBytes], { type: "application/pdf" })
       const downloadUrl = URL.createObjectURL(blob)
 
@@ -94,7 +96,11 @@ async function protectPDF(files: any[], options: any) {
       const zip = new JSZip()
 
       for (const file of files) {
-        const protectedBytes = await PDFProcessor.addPasswordProtection(file.file, password, permissions)
+        const protectedBytes = await PDFProcessor.addPasswordProtection(
+          file.originalFile || file.file, 
+          options.userPassword || options.ownerPassword, 
+          permissions
+        )
         const filename = `protected_${file.name}`
         zip.file(filename, protectedBytes)
       }

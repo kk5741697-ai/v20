@@ -475,16 +475,6 @@ export function ImageToolsLayout({
                 })}
               </div>
             ))}
-
-            {/* Mobile Ad */}
-            <div className="py-4">
-              <AdBanner 
-                adSlot="mobile-image-sidebar"
-                adFormat="auto"
-                className="w-full"
-                mobileOptimized={true}
-              />
-            </div>
           </div>
         </ScrollArea>
         

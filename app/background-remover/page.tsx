@@ -4,9 +4,8 @@ import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Eraser } from "lucide-react"
 import { AdvancedBackgroundProcessor } from "@/lib/processors/advanced-background-processor"
 
+// Simplified options - fully automatic
 const backgroundOptions = [
-  {
-  }
   {
     key: "outputFormat",
     label: "Output Format",

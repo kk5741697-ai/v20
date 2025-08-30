@@ -534,17 +534,6 @@ export function ImageToolsLayout({
             </div>
             <p className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto px-4">{description}</p>
           </div>
-
-        <div className="bg-white border-b">
-          <div className="container mx-auto px-4 py-2 lg:py-3">
-            <AdBanner 
-              adSlot="tool-header-banner"
-              adFormat="auto"
-              className="max-w-4xl mx-auto"
-              mobileOptimized={true}
-            />
-          </div>
-        </div>
           
           <div className="max-w-4xl mx-auto">
             <div 
@@ -757,7 +746,16 @@ export function ImageToolsLayout({
               )}
             </div>
           </div>
-
+<div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+            mobileOptimized={true}
+          />
+        </div>
+      </div>
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

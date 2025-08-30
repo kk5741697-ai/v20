@@ -222,15 +222,15 @@ export function PDFToolsLayout({
       setProcessingProgress(100)
       
       if (result.success && result.downloadUrl) {
-        // Auto-download the result
+        // Auto-download the result with proper filename
         const link = document.createElement("a")
         link.href = result.downloadUrl
-        link.download = "" // Let browser determine filename
+        link.download = result.filename || `processed_${files[0]?.name || 'document'}`
         link.click()
         
         toast({
           title: "Processing complete",
-          description: "File is downloading"
+          description: "File downloaded successfully"
         })
       } else {
         throw new Error(result.error || "Processing failed")

@@ -93,6 +93,7 @@ async function addWatermarkToPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: `watermarked_${files[0].name}`,
       }
     } else {
       // Multiple files - create ZIP

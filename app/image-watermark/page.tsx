@@ -12,6 +12,19 @@ const watermarkOptions = [
     defaultValue: "© Your Brand",
   },
   {
+    key: "useImageWatermark",
+    label: "Use Image Watermark",
+    type: "checkbox" as const,
+    defaultValue: false,
+  },
+  {
+    key: "watermarkImageUrl",
+    label: "Watermark Image URL",
+    type: "text" as const,
+    defaultValue: "",
+    condition: (options) => options.useImageWatermark,
+  },
+  {
     key: "fontSize",
     label: "Font Size",
     type: "slider" as const,
@@ -19,6 +32,7 @@ const watermarkOptions = [
     min: 12,
     max: 120,
     step: 5,
+    condition: (options) => !options.useImageWatermark,
   },
   {
     key: "opacity",
@@ -48,18 +62,7 @@ const watermarkOptions = [
     label: "Text Color",
     type: "color" as const,
     defaultValue: "#ffffff",
-  },
-  {
-    key: "watermarkImage",
-    label: "Watermark Image URL",
-    type: "text" as const,
-    defaultValue: "",
-  },
-  {
-    key: "useImageWatermark",
-    label: "Use Image Watermark",
-    type: "checkbox" as const,
-    defaultValue: false,
+    condition: (options) => !options.useImageWatermark,
   },
 ]
 
@@ -80,7 +83,7 @@ async function addWatermarkToImages(files: any[], options: any) {
           position: options.position,
           textColor: options.textColor,
           fontSize: options.fontSize,
-          watermarkImage: options.useImageWatermark ? options.watermarkImage : undefined,
+          watermarkImage: options.useImageWatermark ? options.watermarkImageUrl : undefined,
         }
         
         const processedBlob = await ImageProcessor.addWatermark(

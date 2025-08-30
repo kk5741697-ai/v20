@@ -241,6 +241,13 @@ export function ImageToolsLayout({
           title: "Processing complete",
           description: `${result.processedFiles.length} image${result.processedFiles.length > 1 ? 's' : ''} processed successfully`
         })
+        
+        // Auto-download if single file
+        if (result.processedFiles.length === 1) {
+          setTimeout(() => {
+            downloadFile(result.processedFiles[0])
+          }, 500)
+        }
       } else {
         throw new Error(result.error || "Processing failed")
       }
@@ -309,7 +316,7 @@ export function ImageToolsLayout({
       
       toast({
         title: "Download started",
-        description: "ZIP file with all processed images downloaded"
+        description: processedFiles.length === 1 ? "Image downloaded successfully" : "ZIP file with all processed images downloaded"
       })
     } catch (error) {
       toast({
@@ -468,13 +475,6 @@ export function ImageToolsLayout({
                             onChange={(e) => setToolOptions(prev => ({ ...prev, [option.key]: e.target.value }))}
                             className="flex-1 font-mono"
                           />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
           </div>
         </ScrollArea>
         
@@ -737,7 +737,7 @@ export function ImageToolsLayout({
               className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
             >
               <Download className="h-4 w-4 mr-2" />
-              Download All
+              {files.filter(f => f.processed).length === 1 ? "Download Image" : `Download ZIP (${files.filter(f => f.processed).length} files)`}
             </Button>
           )}
         </div>
@@ -1042,30 +1042,14 @@ export function ImageToolsLayout({
             </Button>
 
             {files.some(f => f.processed) && (
-              <>
-                {files.filter(f => f.processed).length === 1 ? (
-                  <Button 
-                    onClick={() => {
-                      const processedFile = files.find(f => f.processed)
-                      if (processedFile) downloadFile(processedFile)
-                    }}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
-                    size="lg"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Image
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={downloadAll}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
-                    size="lg"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download ZIP ({files.filter(f => f.processed).length} files)
-                  </Button>
-                )}
-              </>
+              <Button 
+                onClick={downloadAll}
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                size="lg"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {files.filter(f => f.processed).length === 1 ? "Download Image" : `Download ZIP (${files.filter(f => f.processed).length} files)`}
+              </Button>
             )}
           </div>
         </div>

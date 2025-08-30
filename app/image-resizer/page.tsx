@@ -4,11 +4,6 @@ import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { Maximize } from "lucide-react"
 import { ImageProcessor } from "@/lib/processors/image-processor"
 
-export const metadata = {
-  title: "Image Resizer",
-  description: "Define your dimensions by percent or pixel, and resize your images with presets."
-}
-
 const resizeOptions = [
   {
     key: "width",
@@ -34,47 +29,6 @@ const resizeOptions = [
     type: "checkbox" as const,
     defaultValue: true,
     section: "Dimensions",
-  },
-  {
-    key: "resizeMode",
-    label: "Resize Mode",
-    type: "select" as const,
-    defaultValue: "pixels",
-    selectOptions: [
-      { value: "pixels", label: "Exact Pixels" },
-      { value: "percentage", label: "Percentage" },
-      { value: "fit", label: "Fit to Size" },
-    ],
-    section: "Dimensions",
-  },
-  {
-    key: "outputFormat",
-    label: "Output Format",
-    type: "select" as const,
-    defaultValue: "jpeg",
-    selectOptions: [
-      { value: "jpeg", label: "JPEG" },
-      { value: "png", label: "PNG" },
-      { value: "webp", label: "WebP" },
-    ],
-    section: "Output",
-  },
-  {
-    key: "quality",
-    label: "Quality",
-    type: "slider" as const,
-    defaultValue: 90,
-    min: 10,
-    max: 100,
-    step: 5,
-    section: "Output",
-  },
-  {
-    key: "backgroundColor",
-    label: "Background Color",
-    type: "color" as const,
-    defaultValue: "#ffffff",
-    section: "Style",
   },
 ]
 
@@ -113,16 +67,13 @@ async function resizeImages(files: any[], options: any) {
           width: targetWidth,
           height: targetHeight,
           maintainAspectRatio: options.maintainAspectRatio,
-          outputFormat: options.outputFormat || "jpeg",
-          quality: options.quality,
-          backgroundColor: options.backgroundColor
+          outputFormat: "png"
         })
 
         const processedUrl = URL.createObjectURL(processedBlob)
         
-        const outputFormat = options.outputFormat || "jpeg"
         const baseName = file.name.split(".")[0]
-        const newName = `${baseName}_resized.${outputFormat}`
+        const newName = `${baseName}_resized.png`
 
         return {
           ...file,

@@ -15,7 +15,6 @@ const convertOptions = [
       { value: "png", label: "PNG" },
       { value: "webp", label: "WebP" },
     ],
-    section: "Output",
   },
 ]
 

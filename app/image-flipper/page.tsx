@@ -22,9 +22,8 @@ async function flipImages(files: any[], options: any) {
   try {
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        const processedBlob = await ImageProcessor.convertFormat(
+        const processedBlob = await ImageProcessor.resizeImage(
           file.originalFile || file.file,
-          "png",
           {
             flipHorizontal: options.flipDirection === "horizontal" || options.flipDirection === "both",
             flipVertical: options.flipDirection === "vertical" || options.flipDirection === "both",

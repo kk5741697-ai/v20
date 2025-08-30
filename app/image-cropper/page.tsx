@@ -569,13 +569,6 @@ export default function ImageCropperPage() {
             </div>
 
             {/* Mobile Ad */}
-            <div className="py-4">
-              <AdBanner 
-                adSlot="mobile-crop-sidebar"
-                adFormat="auto"
-                className="w-full"
-              />
-            </div>
           </div>
         </ScrollArea>
         
@@ -1136,11 +1129,6 @@ export default function ImageCropperPage() {
                 </div>
 
                 {/* Sidebar Ad */}
-                <AdBanner 
-                  adSlot="crop-sidebar"
-                  adFormat="auto"
-                  className="w-full"
-                />
               </div>
             </ScrollArea>
           </div>

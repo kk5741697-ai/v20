@@ -13,7 +13,6 @@ const compressionOptions = [
     min: 10,
     max: 100,
     step: 5,
-    section: "Compression",
   },
   {
     key: "compressionLevel",
@@ -26,7 +25,6 @@ const compressionOptions = [
       { value: "high", label: "High Compression (Small Size)" },
       { value: "maximum", label: "Maximum Compression (Smallest)" },
     ],
-    section: "Compression",
   },
   {
     key: "outputFormat",
@@ -38,14 +36,6 @@ const compressionOptions = [
       { value: "png", label: "PNG" },
       { value: "webp", label: "WebP" },
     ],
-    section: "Output",
-  },
-  {
-    key: "backgroundColor",
-    label: "Background Color",
-    type: "color" as const,
-    defaultValue: "#ffffff",
-    section: "Style",
   },
 ]
 
@@ -65,7 +55,6 @@ async function compressImages(files: any[], options: any) {
           quality,
           compressionLevel: options.compressionLevel,
           outputFormat: options.outputFormat,
-          backgroundColor: options.backgroundColor,
         })
 
         const processedUrl = URL.createObjectURL(processedBlob)

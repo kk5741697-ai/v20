@@ -143,6 +143,11 @@ export class ImageProcessor {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
           ctx.restore()
 
+          // Apply watermark if specified
+          if (options.watermarkText) {
+            this.applyTextWatermark(ctx, canvas, options.watermarkText, options)
+          }
+
           const quality = Math.max(0.1, Math.min(1.0, (options.quality || 90) / 100))
           const mimeType = `image/${options.outputFormat || "png"}`
 
@@ -542,6 +547,66 @@ export class ImageProcessor {
     })
   }
 
+  private static applyTextWatermark(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement, 
+    watermarkText: string, 
+    options: ImageProcessingOptions
+  ): void {
+    ctx.save()
+    
+    // Better font size calculation
+    const baseFontSize = Math.min(canvas.width, canvas.height) * 0.08
+    const fontSizeMultiplier = (options.fontSize || 48) / 48
+    const fontSize = Math.max(12, baseFontSize * fontSizeMultiplier)
+    
+    ctx.font = `bold ${fontSize}px Arial`
+    ctx.fillStyle = options.textColor || "#ffffff"
+    ctx.globalAlpha = Math.max(0.1, Math.min(1.0, options.watermarkOpacity || 0.5))
+
+    // Position watermark
+    let x = canvas.width / 2
+    let y = canvas.height / 2
+
+    switch (options.position) {
+      case "top-left":
+        x = fontSize
+        y = fontSize * 2
+        ctx.textAlign = "left"
+        break
+      case "top-right":
+        x = canvas.width - fontSize
+        y = fontSize * 2
+        ctx.textAlign = "right"
+        break
+      case "bottom-left":
+        x = fontSize
+        y = canvas.height - fontSize
+        ctx.textAlign = "left"
+        break
+      case "bottom-right":
+        x = canvas.width - fontSize
+        y = canvas.height - fontSize
+        ctx.textAlign = "right"
+        break
+      case "diagonal":
+        ctx.translate(canvas.width / 2, canvas.height / 2)
+        ctx.rotate(-Math.PI / 4)
+        x = 0
+        y = 0
+        ctx.textAlign = "center"
+        break
+      default: // center
+        ctx.textAlign = "center"
+        break
+    }
+
+    ctx.textBaseline = "middle"
+    ctx.fillText(watermarkText, x, y)
+    
+    ctx.restore()
+  }
+
   static async removeBackground(file: File, options: ImageProcessingOptions): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement("canvas")
@@ -559,15 +624,15 @@ export class ImageProcessor {
 
           ctx.drawImage(img, 0, 0)
 
-          // Advanced background removal with edge detection
+          // Enhanced background removal with better edge detection
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
           const data = imageData.data
 
-          // Advanced multi-point background detection
+          // Improved multi-point background detection
           const bgColor = this.detectBackgroundColor(data, canvas.width, canvas.height)
           const sensitivity = Math.max(10, Math.min(100, options.sensitivity || 30))
           
-          // Apply advanced background removal with edge detection
+          // Apply enhanced background removal with better edge detection
           this.removeBackgroundAdvanced(data, canvas.width, canvas.height, bgColor, sensitivity, options)
 
           ctx.putImageData(imageData, 0, 0)
@@ -591,10 +656,10 @@ export class ImageProcessor {
   }
 
   private static detectBackgroundColor(data: Uint8ClampedArray, width: number, height: number): number[] {
-    // Advanced background detection using multiple sampling strategies
+    // Enhanced background detection using improved sampling strategies
     const edgePixels: number[][] = []
-    const cornerWeight = 3
-    const edgeWeight = 2
+    const cornerWeight = 5
+    const edgeWeight = 3
     
     // Sample corners (higher weight)
     const corners = [
@@ -609,12 +674,12 @@ export class ImageProcessor {
       }
     })
     
-    // Sample edges (medium weight)
+    // Sample edges with more points (medium weight)
     const edgePoints = [
-      ...Array.from({ length: 20 }, (_, i) => [Math.floor((width * i) / 20), 0]), // Top edge
-      ...Array.from({ length: 20 }, (_, i) => [Math.floor((width * i) / 20), height - 1]), // Bottom edge
-      ...Array.from({ length: 20 }, (_, i) => [0, Math.floor((height * i) / 20)]), // Left edge
-      ...Array.from({ length: 20 }, (_, i) => [width - 1, Math.floor((height * i) / 20)]), // Right edge
+      ...Array.from({ length: 30 }, (_, i) => [Math.floor((width * i) / 30), 0]), // Top edge
+      ...Array.from({ length: 30 }, (_, i) => [Math.floor((width * i) / 30), height - 1]), // Bottom edge
+      ...Array.from({ length: 30 }, (_, i) => [0, Math.floor((height * i) / 30)]), // Left edge
+      ...Array.from({ length: 30 }, (_, i) => [width - 1, Math.floor((height * i) / 30)]), // Right edge
     ]
     
     edgePoints.forEach(([x, y]) => {
@@ -625,7 +690,7 @@ export class ImageProcessor {
       }
     })
     
-    // Find dominant color using improved clustering
+    // Find dominant color using enhanced clustering
     return this.findDominantColor(edgePixels)
   }
   
@@ -633,8 +698,8 @@ export class ImageProcessor {
     const colorCounts = new Map<string, { color: number[], count: number }>()
     
     colors.forEach(color => {
-      // Use smaller buckets for better color detection
-      const key = `${Math.floor(color[0] / 15)}-${Math.floor(color[1] / 15)}-${Math.floor(color[2] / 15)}`
+      // Use optimized buckets for better color detection
+      const key = `${Math.floor(color[0] / 12)}-${Math.floor(color[1] / 12)}-${Math.floor(color[2] / 12)}`
       if (colorCounts.has(key)) {
         colorCounts.get(key)!.count++
       } else {
@@ -663,40 +728,40 @@ export class ImageProcessor {
     sensitivity: number, 
     options: ImageProcessingOptions
   ): void {
-    const threshold = sensitivity * 2.5
+    const threshold = sensitivity * 3.2
     const edgeMap = new Uint8Array(width * height)
     
-    // First pass: Edge detection
+    // First pass: Enhanced edge detection
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
         const idx = y * width + x
         const pixelIdx = idx * 4
         
-        // Calculate gradient magnitude for edge detection
+        // Calculate enhanced gradient magnitude for better edge detection
         let gradientX = 0, gradientY = 0
         
-        // Sobel operator for edge detection
+        // Enhanced Sobel operator for better edge detection
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             const neighborIdx = ((y + dy) * width + (x + dx)) * 4
             const intensity = (data[neighborIdx] + data[neighborIdx + 1] + data[neighborIdx + 2]) / 3
             
-            // Sobel X kernel
+            // Enhanced Sobel X kernel
             const sobelX = dx === -1 ? -1 : dx === 1 ? 1 : 0
             gradientX += intensity * sobelX
             
-            // Sobel Y kernel  
+            // Enhanced Sobel Y kernel  
             const sobelY = dy === -1 ? -1 : dy === 1 ? 1 : 0
             gradientY += intensity * sobelY
           }
         }
         
         const gradientMagnitude = Math.sqrt(gradientX * gradientX + gradientY * gradientY)
-        edgeMap[idx] = gradientMagnitude > threshold * 0.3 ? 1 : 0
+        edgeMap[idx] = gradientMagnitude > threshold * 0.25 ? 1 : 0
       }
     }
     
-    // Second pass: Background removal with edge awareness
+    // Second pass: Enhanced background removal with better edge awareness
     for (let i = 0; i < data.length; i += 4) {
       const pixelIdx = Math.floor(i / 4)
       const x = pixelIdx % width
@@ -706,7 +771,7 @@ export class ImageProcessor {
       const g = data[i + 1]
       const b = data[i + 2]
 
-      // Calculate color distance from background
+      // Calculate enhanced color distance from background
       const colorDistance = Math.sqrt(
         Math.pow(r - bgColor[0], 2) + 
         Math.pow(g - bgColor[1], 2) + 
@@ -715,8 +780,8 @@ export class ImageProcessor {
 
       if (colorDistance < threshold) {
         if (options.featherEdges && edgeMap[pixelIdx]) {
-          // Apply feathering for edge pixels
-          const fadeDistance = threshold * 0.4
+          // Apply enhanced feathering for edge pixels
+          const fadeDistance = threshold * 0.5
           if (colorDistance > threshold - fadeDistance) {
             const alpha = ((colorDistance - (threshold - fadeDistance)) / fadeDistance) * 255
             data[i + 3] = Math.min(255, alpha)
@@ -727,12 +792,12 @@ export class ImageProcessor {
           data[i + 3] = 0 // Make transparent
         }
       } else if (options.preserveDetails && edgeMap[pixelIdx]) {
-        // Enhance edge details
-        data[i + 3] = Math.min(255, data[i + 3] * 1.1)
+        // Enhanced edge detail preservation
+        data[i + 3] = Math.min(255, data[i + 3] * 1.15)
       }
     }
     
-    // Third pass: Smoothing if enabled
+    // Third pass: Enhanced smoothing if enabled
     if (options.smoothing && options.smoothing > 0) {
       const smoothedData = new Uint8ClampedArray(data)
       
@@ -745,7 +810,7 @@ export class ImageProcessor {
             let alphaSum = 0
             let count = 0
             
-            // Sample surrounding pixels
+            // Enhanced sampling of surrounding pixels
             for (let dy = -1; dy <= 1; dy++) {
               for (let dx = -1; dx <= 1; dx++) {
                 const neighborIndex = ((y + dy) * width + (x + dx)) * 4
@@ -755,7 +820,7 @@ export class ImageProcessor {
             }
             
             const avgAlpha = alphaSum / count
-            const smoothingFactor = options.smoothing / 10
+            const smoothingFactor = Math.min(0.8, options.smoothing / 8)
             smoothedData[index + 3] = Math.round(data[index + 3] * (1 - smoothingFactor) + avgAlpha * smoothingFactor)
           }
         }

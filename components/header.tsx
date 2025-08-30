@@ -156,7 +156,7 @@ export function Header() {
                   <Wrench className="h-6 w-6 text-white" />
                 </div>
                 <div className="flex items-center">
-                  <span className="text-2xl font-bold text-gray-900">PIXORA</span>
+                  <span className="text-2xl font-bold text-gray-900">Pixora</span>
                   <span className={`text-2xl font-bold ${brandConfig.color} ml-1`}>{brandConfig.name}</span>
                 </div>
               </div>

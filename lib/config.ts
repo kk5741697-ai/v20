@@ -11,9 +11,9 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG: AppConfig = {
-  enableAds: true, // Enable ads by default
+  enableAds: true, // Enable ads with bounce protection
   adsensePublisherId: process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID || "ca-pub-4755003409431265",
-  enableAutoAds: true, // Enable auto ads for better revenue
+  enableAutoAds: false, // Disable auto ads for tools to prevent policy violations
   enableAnalytics: true,
   enableSearch: true,
   maxFileSize: 100,

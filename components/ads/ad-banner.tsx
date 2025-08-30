@@ -24,6 +24,7 @@ export function AdBanner({
 }: AdBannerProps) {
   const [isClient, setIsClient] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [shouldShowAd, setShouldShowAd] = useState(false)
   const adRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
@@ -35,7 +36,28 @@ export function AdBanner({
   }, [])
 
   useEffect(() => {
-    if (isClient && adRef.current && APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId) {
+    // Implement bounce protection for AdSense policy compliance
+    const sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0')
+    const currentTime = Date.now()
+    const sessionDuration = currentTime - sessionStartTime
+    const pageViews = parseInt(sessionStorage.getItem('pageViews') || '0')
+    const toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0')
+    
+    // Only show ads if user has engaged meaningfully
+    const shouldShow = sessionDuration > 10000 || // 10 seconds minimum
+                      pageViews > 2 || // Multiple page views
+                      toolUsage > 0 // Used at least one tool
+    
+    setShouldShowAd(shouldShow)
+    
+    // Track session
+    if (!sessionStartTime) {
+      sessionStorage.setItem('sessionStartTime', currentTime.toString())
+    }
+    sessionStorage.setItem('pageViews', (pageViews + 1).toString())
+  }, [])
+  useEffect(() => {
+    if (isClient && adRef.current && APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId && shouldShowAd) {
       try {
         (window as any).adsbygoogle = (window as any).adsbygoogle || []
         ;(window as any).adsbygoogle.push({})
@@ -43,10 +65,10 @@ export function AdBanner({
         console.warn('AdSense initialization failed:', error)
       }
     }
-  }, [isClient])
+  }, [isClient, shouldShowAd])
 
   // Don't render if ads are disabled
-  if (!APP_CONFIG.enableAds || !APP_CONFIG.adsensePublisherId) {
+  if (!APP_CONFIG.enableAds || !APP_CONFIG.adsensePublisherId || !shouldShowAd) {
     return null
   }
 

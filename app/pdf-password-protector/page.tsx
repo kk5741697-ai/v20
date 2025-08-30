@@ -63,7 +63,7 @@ async function protectPDF(files: any[], options: any) {
       }
     }
 
-    if (!options.userPassword && !options.ownerPassword) {
+    if (!options.userPassword?.trim() && !options.ownerPassword?.trim()) {
       return {
         success: false,
         error: "Please provide at least one password (user or owner)",
@@ -76,11 +76,13 @@ async function protectPDF(files: any[], options: any) {
     if (options.allowModifying) permissions.push("modify")
     if (options.allowAnnotations) permissions.push("annotate")
 
+    const password = options.userPassword?.trim() || options.ownerPassword?.trim()
+
     if (files.length === 1) {
       // Single file protection
       const protectedBytes = await PDFProcessor.addPasswordProtection(
         files[0].originalFile || files[0].file, 
-        options.userPassword || options.ownerPassword, 
+        password, 
         permissions
       )
       const blob = new Blob([protectedBytes], { type: "application/pdf" })
@@ -89,6 +91,7 @@ async function protectPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: `protected_${files[0].name}`,
       }
     } else {
       // Multiple files - create ZIP
@@ -98,7 +101,7 @@ async function protectPDF(files: any[], options: any) {
       for (const file of files) {
         const protectedBytes = await PDFProcessor.addPasswordProtection(
           file.originalFile || file.file, 
-          options.userPassword || options.ownerPassword, 
+          password, 
           permissions
         )
         const filename = `protected_${file.name}`
@@ -111,6 +114,7 @@ async function protectPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: "protected_pdfs.zip",
       }
     }
   } catch (error) {

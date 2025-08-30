@@ -55,7 +55,7 @@ export function Footer() {
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                 <Wrench className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-heading text-xl font-bold text-sidebar-foreground">WebTools Pro</span>
+              <span className="font-heading text-xl font-bold text-sidebar-foreground">PixoraTools</span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">
               Professional online tools platform with 300+ utilities for developers, designers, and businesses.

@@ -87,10 +87,36 @@ export default function RootLayout({
         <Script id="adsense-init" strategy="afterInteractive">
           {`
             (function() {
+              // Enhanced bounce protection for AdSense policy compliance
+              let sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0');
+              let pageViews = parseInt(sessionStorage.getItem('pageViews') || '0');
+              let toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0');
+              
+              if (!sessionStartTime) {
+                sessionStartTime = Date.now();
+                sessionStorage.setItem('sessionStartTime', sessionStartTime.toString());
+              }
+              
+              // Track tool usage
+              document.addEventListener('click', function(e) {
+                const target = e.target;
+                if (target && (target.closest('[data-tool-action]') || target.closest('button'))) {
+                  toolUsage++;
+                  sessionStorage.setItem('toolUsage', toolUsage.toString());
+                }
+              });
+              
               // Handle SPA navigation for AdSense
               let currentPath = window.location.pathname;
               
               function initAdsense() {
+                const sessionDuration = Date.now() - sessionStartTime;
+                const shouldShowAds = sessionDuration > 15000 || pageViews > 2 || toolUsage > 0;
+                
+                if (!shouldShowAds) {
+                  return; // Don't initialize ads for bouncy users
+                }
+                
                 try {
                   // Initialize AdSense for SPA
                   window.adsbygoogle = window.adsbygoogle || [];
@@ -105,18 +131,7 @@ export default function RootLayout({
                     }
                   });
                   
-                  // Initialize auto ads only once
-                  if (!window.autoAdsInitialized) {
-                    window.adsbygoogle.push({
-                      google_ad_client: "ca-pub-4755003409431265",
-                      enable_page_level_ads: true,
-                      overlays: { bottom: false }, // Disable overlay ads for tools
-                      page_level_ads: {
-                        enabled: true
-                      }
-                    });
-                    window.autoAdsInitialized = true;
-                  }
+                  // Disable auto ads to prevent policy violations
                 } catch (e) {
                   console.warn('AdSense initialization failed:', e);
                 }
@@ -124,9 +139,12 @@ export default function RootLayout({
               
               // Handle route changes for SPA
               function handleRouteChange() {
+                pageViews++;
+                sessionStorage.setItem('pageViews', pageViews.toString());
+                
                 if (window.location.pathname !== currentPath) {
                   currentPath = window.location.pathname;
-                  setTimeout(initAdsense, 100);
+                  setTimeout(initAdsense, 2000); // Longer delay for better user experience
                 }
               }
               

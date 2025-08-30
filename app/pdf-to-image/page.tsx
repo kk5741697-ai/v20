@@ -57,6 +57,7 @@ async function convertPDFToImage(files: any[], options: any) {
       outputFormat: options.outputFormat,
       dpi: Number.parseInt(options.resolution),
       colorMode: options.colorMode,
+      imageQuality: 90,
     }
 
     if (files.length === 1) {
@@ -77,6 +78,7 @@ async function convertPDFToImage(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: `${files[0].name.replace(".pdf", "")}_images.zip`,
       }
     } else {
       // Multiple files - create ZIP with all images

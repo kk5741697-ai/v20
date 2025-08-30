@@ -414,7 +414,7 @@ export function PDFToolsLayout({
       <div className="min-h-screen bg-background">
         <Header />
 
-        <div className="container mx-auto px-4 py-6 lg:py-8">
+        <div className="container mx-auto py-4 lg:py-8">
           <div className="text-center mb-6 lg:mb-8">
             <div className="inline-flex items-center space-x-2 mb-4">
               <Icon className="h-6 w-6 lg:h-8 lg:w-8 text-red-600" />

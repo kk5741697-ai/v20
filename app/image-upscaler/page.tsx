@@ -3,6 +3,7 @@
 import { ImageToolsLayout } from "@/components/image-tools-layout"
 import { ZoomIn } from "lucide-react"
 import { UltimateImageUpscaler } from "@/lib/processors/ultimate-upscaler"
+import { ImageProcessor } from "@/lib/processors/image-processor"
 
 const upscaleOptions = [
   {
@@ -79,12 +80,12 @@ async function upscaleImages(files: any[], options: any) {
       }
     }
 
-    // Enhanced safety checks
+    // Enhanced safety checks with stricter limits
     const totalSize = files.reduce((sum: number, f: any) => sum + f.size, 0)
-    if (totalSize > 100 * 1024 * 1024) { // 100MB total limit
+    if (totalSize > 50 * 1024 * 1024) { // 50MB total limit
       return {
         success: false,
-        error: "Total file size too large. Maximum 100MB total allowed.",
+        error: "Total file size too large. Maximum 50MB total allowed.",
       }
     }
 
@@ -93,61 +94,50 @@ async function upscaleImages(files: any[], options: any) {
         try {
           const scaleFactor = parseFloat(options.scaleFactor || "2")
           
-          // Enhanced safety check for individual files
-          if (file.size > 25 * 1024 * 1024) {
-            throw new Error(`File ${file.name} is too large (${Math.round(file.size / (1024 * 1024))}MB). Maximum 25MB per file.`)
+          // Stricter safety check for individual files
+          if (file.size > 15 * 1024 * 1024) {
+            throw new Error(`File ${file.name} is too large (${Math.round(file.size / (1024 * 1024))}MB). Maximum 15MB per file.`)
           }
           
           // Check image dimensions
-          if (file.dimensions && file.dimensions.width * file.dimensions.height > 1024 * 1024) {
-            throw new Error(`Image resolution too high (${file.dimensions.width}x${file.dimensions.height}). Maximum 1MP allowed.`)
+          if (file.dimensions && file.dimensions.width * file.dimensions.height > 1536 * 1536) {
+            throw new Error(`Image resolution too high (${file.dimensions.width}x${file.dimensions.height}). Maximum 2.3MP allowed.`)
           }
           
-          const ultimateOptions = {
-            scaleFactor: Math.min(scaleFactor, 3), // Limit to 3x
-            maxOutputDimension: 1536, // Reduced from 2048
+          // Use enhanced upscaling with better error handling
+          const upscaleOptions = {
+            scaleFactor: Math.min(scaleFactor, 2.5), // Limit to 2.5x for stability
+            maxOutputDimension: 1024, // Further reduced for stability
             primaryAlgorithm: options.primaryAlgorithm || "auto",
-            secondaryAlgorithm: "lanczos",
-            hybridMode: true,
-            enableContentAnalysis: true,
-            contentType: "auto",
             enhanceDetails: options.enhanceDetails !== false,
             reduceNoise: options.reduceNoise !== false,
             sharpenAmount: options.sharpenAmount || 25,
-            colorEnhancement: true,
-            contrastBoost: 10,
-            multiPass: true,
-            memoryOptimized: true, // Always enable memory optimization
-            chunkProcessing: true,
             outputFormat: options.outputFormat || "png",
             quality: 95,
-            progressCallback: (progress: number, stage: string) => {
-              console.log(`Image Upscaling: ${Math.round(progress)}% - ${stage}`)
-            },
-            debugMode: false
+            memoryOptimized: true,
           }
 
-          // Add timeout and abort signal support
-          const abortController = new AbortController()
-          const timeoutId = setTimeout(() => {
-            abortController.abort()
-          }, 300000) // 5 minute timeout
+          // Add timeout for processing
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Processing timeout")), 120000) // 2 minute timeout
+          })
 
-          const result = await UltimateImageUpscaler.upscaleImage(
+          const upscalePromise = UltimateImageUpscaler.upscaleImage(
             file.originalFile || file.file,
-            ultimateOptions
+            upscaleOptions
           )
-          
-          clearTimeout(timeoutId)
+
+          const result = await Promise.race([upscalePromise, timeoutPromise]) as any
 
           const processedUrl = URL.createObjectURL(result.processedBlob)
         
-          const baseName = file.name.split(".")[0]
-          const newName = `${baseName}_${result.actualScaleFactor}x_upscaled.${options.outputFormat || "png"}`
+          const baseName = file.name.split(".")[0] 
+          const actualScale = result.actualScaleFactor || scaleFactor
+          const newName = `${baseName}_${actualScale.toFixed(1)}x_upscaled.${options.outputFormat || "png"}`
 
           const newDimensions = {
-            width: result.finalDimensions.width,
-            height: result.finalDimensions.height
+            width: result.finalDimensions?.width || Math.floor(file.dimensions.width * actualScale),
+            height: result.finalDimensions?.height || Math.floor(file.dimensions.height * actualScale)
           }
 
           return {
@@ -158,10 +148,10 @@ async function upscaleImages(files: any[], options: any) {
             processedSize: result.processedBlob.size,
             blob: result.processedBlob,
             dimensions: newDimensions,
-            actualScaleFactor: result.actualScaleFactor,
-            algorithmsUsed: result.algorithmsUsed,
-            processingTime: result.processingTime,
-            qualityMetrics: result.qualityMetrics
+            actualScaleFactor: actualScale,
+            algorithmsUsed: result.algorithmsUsed || [options.primaryAlgorithm],
+            processingTime: result.processingTime || 0,
+            qualityMetrics: result.qualityMetrics || { sharpness: 0, noise: 0, artifacts: 0 }
           }
         } catch (error) {
           console.error(`Failed to upscale ${file.name}:`, error)
@@ -186,11 +176,12 @@ async function upscaleImages(files: any[], options: any) {
     if (successfulFiles.length === 0) {
       return {
         success: false,
-        error: "All files failed to upscale. Please try with smaller images (under 25MB) or lower scale factors.",
+        error: "All files failed to upscale. Please try with smaller images (under 15MB) or lower scale factors.",
       }
     }
     
     // Force cleanup after processing
+    ImageProcessor.cleanupMemory()
     setTimeout(() => {
       if ('gc' in window && typeof (window as any).gc === 'function') {
         (window as any).gc()
@@ -214,12 +205,12 @@ export default function ImageUpscalerPage() {
   return (
     <ImageToolsLayout
       title="Image Upscaler"
-      description="AI-powered image upscaling with advanced algorithms. Enlarge images up to 4x while preserving quality and details. Supports photos, art, and graphics."
+      description="AI-powered image upscaling with advanced algorithms. Enlarge images up to 2.5x while preserving quality and details. Optimized for stability and performance."
       icon={ZoomIn}
       toolType="upscale"
       processFunction={upscaleImages}
       options={upscaleOptions}
-      maxFiles={5}
+      maxFiles={3}
       allowBatchProcessing={true}
       supportedFormats={["image/jpeg", "image/png", "image/webp"]}
       outputFormats={["png", "jpeg", "webp"]}

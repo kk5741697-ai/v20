@@ -425,7 +425,7 @@ export function PDFToolsLayout({
 
         
             {/* Mobile Bottom Ad */}
-            <div className="mt-6 lg:mt-8 lg:hidden">
+            <div className="mt-6 lg:mb-8 lg:hidden">
               <AdBanner 
                 adSlot="mobile-upload-bottom"
                 adFormat="auto"
@@ -434,11 +434,11 @@ export function PDFToolsLayout({
             </div>
 
             {/* Desktop Bottom Ad */}
-            <div className="mt-8 hidden lg:block">
+            <div className="mb-8 hidden lg:block">
               <AdBanner 
                 adSlot="upload-bottom-banner"
                 adFormat="horizontal"
-                className="max-w-2xl mx-auto"
+                className="max-w-4xl mx-auto"
               />
             </div>
 

@@ -14,18 +14,6 @@ const rotateOptions = [
     max: 180,
     step: 1,
   },
-  {
-    key: "quickRotate",
-    label: "Quick Rotate",
-    type: "select" as const,
-    defaultValue: "0",
-    selectOptions: [
-      { value: "0", label: "No Rotation" },
-      { value: "90", label: "90° Clockwise" },
-      { value: "180", label: "180°" },
-      { value: "270", label: "270° Clockwise" },
-    ],
-  },
 ]
 
 async function rotateImages(files: any[], options: any) {
@@ -39,7 +27,7 @@ async function rotateImages(files: any[], options: any) {
 
     const processedFiles = await Promise.all(
       files.map(async (file) => {
-        const angle = options.quickRotate !== "0" ? parseInt(options.quickRotate) : (options.customAngle || 0)
+        const angle = options.customAngle || 0
         
         const processedBlob = await ImageProcessor.rotateImage(file.originalFile || file.file, {
           customRotation: angle,

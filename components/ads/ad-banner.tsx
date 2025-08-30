@@ -37,24 +37,52 @@ export function AdBanner({
 
   useEffect(() => {
     // Implement bounce protection for AdSense policy compliance
-    const sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0')
+    let sessionStartTime = parseInt(sessionStorage.getItem('sessionStartTime') || '0')
+    let pageViews = parseInt(sessionStorage.getItem('pageViews') || '0')
+    let toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0')
+    
+    if (!sessionStartTime) {
+      sessionStartTime = Date.now()
+      sessionStorage.setItem('sessionStartTime', sessionStartTime.toString())
+    }
+    
     const currentTime = Date.now()
     const sessionDuration = currentTime - sessionStartTime
-    const pageViews = parseInt(sessionStorage.getItem('pageViews') || '0')
-    const toolUsage = parseInt(sessionStorage.getItem('toolUsage') || '0')
     
-    // Only show ads if user has engaged meaningfully
-    const shouldShow = sessionDuration > 10000 || // 10 seconds minimum
-                      pageViews > 2 || // Multiple page views
-                      toolUsage > 0 // Used at least one tool
+    // Enhanced bounce protection - only show ads if user has engaged meaningfully
+    const shouldShow = sessionDuration > 15000 || // 15 seconds minimum
+                      pageViews > 3 || // Multiple page views
+                      toolUsage > 1 // Used multiple tools
     
     setShouldShowAd(shouldShow)
     
-    // Track session
-    if (!sessionStartTime) {
-      sessionStorage.setItem('sessionStartTime', currentTime.toString())
+    // Track page view
+    pageViews++
+    sessionStorage.setItem('pageViews', pageViews.toString())
+    
+    // Track tool usage on file uploads and processing
+    const trackToolUsage = () => {
+      toolUsage++
+      sessionStorage.setItem('toolUsage', toolUsage.toString())
     }
-    sessionStorage.setItem('pageViews', (pageViews + 1).toString())
+    
+    // Listen for file uploads and tool actions
+    document.addEventListener('change', (e) => {
+      if (e.target instanceof HTMLInputElement && e.target.type === 'file') {
+        trackToolUsage()
+      }
+    })
+    
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement
+      if (target.closest('[data-tool-action]') || 
+          target.closest('button[type="submit"]') ||
+          target.textContent?.includes('Process') ||
+          target.textContent?.includes('Generate') ||
+          target.textContent?.includes('Convert')) {
+        trackToolUsage()
+      }
+    })
   }, [])
   useEffect(() => {
     if (isClient && adRef.current && APP_CONFIG.enableAds && APP_CONFIG.adsensePublisherId && shouldShowAd) {

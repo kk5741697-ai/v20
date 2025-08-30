@@ -60,47 +60,26 @@ async function convertPDFToImage(files: any[], options: any) {
       imageQuality: 90,
     }
 
-    if (files.length === 1) {
-      // Single file - create ZIP with all page images
-      const JSZip = (await import("jszip")).default
-      const zip = new JSZip()
-      
-      const images = await PDFProcessor.pdfToImages(files[0].file, conversionOptions)
-      
+    // Always create ZIP with all images
+    const JSZip = (await import("jszip")).default
+    const zip = new JSZip()
+
+    for (const file of files) {
+      const images = await PDFProcessor.pdfToImages(file.file, conversionOptions)
+
       images.forEach((imageBlob, pageIndex) => {
-        const filename = `${files[0].name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
+        const filename = `${file.name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
         zip.file(filename, imageBlob)
       })
-      
-      const zipBlob = await zip.generateAsync({ type: "blob" })
-      const downloadUrl = URL.createObjectURL(zipBlob)
-      
-      return {
-        success: true,
-        downloadUrl,
-        filename: `${files[0].name.replace(".pdf", "")}_images.zip`,
-      }
-    } else {
-      // Multiple files - create ZIP with all images
-      const JSZip = (await import("jszip")).default
-      const zip = new JSZip()
+    }
 
-      for (const file of files) {
-        const images = await PDFProcessor.pdfToImages(file.file, conversionOptions)
+    const zipBlob = await zip.generateAsync({ type: "blob" })
+    const downloadUrl = URL.createObjectURL(zipBlob)
 
-        images.forEach((imageBlob, pageIndex) => {
-          const filename = `${file.name.replace(".pdf", "")}_page_${pageIndex + 1}.${options.outputFormat}`
-          zip.file(filename, imageBlob)
-        })
-      }
-
-      const zipBlob = await zip.generateAsync({ type: "blob" })
-      const downloadUrl = URL.createObjectURL(zipBlob)
-
-      return {
-        success: true,
-        downloadUrl,
-      }
+    return {
+      success: true,
+      downloadUrl,
+      filename: files.length === 1 ? `${files[0].name.replace(".pdf", "")}_images.zip` : "pdf_images.zip",
     }
   } catch (error) {
     return {

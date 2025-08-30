@@ -23,10 +23,47 @@ import {
   Maximize2,
   Settings,
   TrendingUp
+import { useState, useRef, useCallback } from "react"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Progress } from "@/components/ui/progress"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { 
+  Upload, 
+  Download, 
+  CheckCircle,
+  X,
+  RefreshCw,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Settings,
+  TrendingUp
 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { ImageProcessor } from "@/lib/processors/image-processor"
+import { AdBanner } from "@/components/ads/ad-banner"
 
+interface ImageFile {
+  id: string
+  file: File
+  originalFile?: File
+  name: string
+  size: number
+  dimensions?: { width: number; height: number }
+  preview: string
+  processed?: boolean
+  processedPreview?: string
+  processedSize?: number
+  blob?: Blob
+}
 interface ImageFile {
   id: string
   file: File
@@ -65,36 +102,9 @@ const upscaleOptions = [
       { value: "nearest", label: "Nearest Neighbor (Pixel Art)" },
     ],
   },
-  {
-    key: "enhanceDetails",
-    label: "Enhance Details",
-    type: "checkbox" as const,
-    defaultValue: true,
-  },
-  {
-    key: "reduceNoise",
-    label: "Reduce Noise",
-    type: "checkbox" as const,
-    defaultValue: false,
-  },
 ]
 
 export default function ImageUpscalerPage() {
-  const [file, setFile] = useState<ImageFile | null>(null)
-  const [toolOptions, setToolOptions] = useState<Record<string, any>>({
-    scaleFactor: "2",
-    algorithm: "bicubic",
-    enhanceDetails: true,
-    reduceNoise: false,
-  })
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [processingProgress, setProcessingProgress] = useState(0)
-  const [zoomLevel, setZoomLevel] = useState(100)
-  const [showUploadArea, setShowUploadArea] = useState(true)
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
   const handleFileUpload = async (uploadedFiles: FileList | null) => {
     if (!uploadedFiles || uploadedFiles.length === 0) return
 
@@ -538,8 +548,277 @@ export default function ImageUpscalerPage() {
 +              )}
 +            </Button>
 +          </div>
+  const [file, setFile] = useState<ImageFile | null>(null)
+  const [toolOptions, setToolOptions] = useState<Record<string, any>>({
+    scaleFactor: "2",
+    algorithm: "bicubic",
+  })
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState(0)
+  const [zoomLevel, setZoomLevel] = useState(100)
+  const [showUploadArea, setShowUploadArea] = useState(true)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
 +
+  const handleFileUpload = async (uploadedFiles: FileList | null) => {
+    if (!uploadedFiles || uploadedFiles.length === 0) return
+
+    const uploadedFile = uploadedFiles[0]
+    if (!uploadedFile.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: `${uploadedFile.name} is not an image file`,
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const dimensions = await getImageDimensions(uploadedFile)
+      const preview = await createImagePreview(uploadedFile)
+      
+      const imageFile: ImageFile = {
+        id: `${uploadedFile.name}-${Date.now()}`,
+        file: uploadedFile,
+        originalFile: uploadedFile,
+        name: uploadedFile.name,
+        size: uploadedFile.size,
+        dimensions,
+        preview,
+      }
+
+      setFile(imageFile)
+      setShowUploadArea(false)
+      toast({
+        title: "Image uploaded",
+        description: "Image loaded successfully for upscaling"
+      })
+    } catch (error) {
+      toast({
+        title: "Error loading image",
+        description: `Failed to load ${uploadedFile.name}`,
+        variant: "destructive"
+      })
+    }
+  }
+
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      img.onerror = reject
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  const createImagePreview = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target?.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    handleFileUpload(e.dataTransfer.files)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+
+  const resetTool = () => {
+    setFile(null)
+    setToolOptions({
+      scaleFactor: "2",
+      algorithm: "bicubic",
+    })
+    setProcessingProgress(0)
+    setShowUploadArea(true)
+    setIsMobileSidebarOpen(false)
+  }
+
+  const handleUpscale = async () => {
+    if (!file) {
+      toast({
+        title: "No image selected",
+        description: "Please upload an image to upscale",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsProcessing(true)
+    setProcessingProgress(0)
+
+    try {
+      const progressInterval = setInterval(() => {
+        setProcessingProgress(prev => Math.min(prev + 15, 90))
+      }, 300)
+
+      const scaleFactor = parseFloat(toolOptions.scaleFactor)
+      const newWidth = Math.floor(file.dimensions!.width * scaleFactor)
+      const newHeight = Math.floor(file.dimensions!.height * scaleFactor)
+
+      // Simulate AI upscaling with enhanced resize
+      const processedBlob = await ImageProcessor.resizeImage(file.originalFile || file.file, {
+        width: newWidth,
+        height: newHeight,
+        maintainAspectRatio: true,
+        outputFormat: "png",
+        algorithm: toolOptions.algorithm,
+      })
+
+      clearInterval(progressInterval)
+      setProcessingProgress(100)
+
+      const processedUrl = URL.createObjectURL(processedBlob)
+      const baseName = file.name.split(".")[0]
+      const newName = `${baseName}_upscaled_${toolOptions.scaleFactor}x.png`
+
+      const processedFile = {
+        ...file,
+        processed: true,
+        processedPreview: processedUrl,
+        name: newName,
+        processedSize: processedBlob.size,
+        blob: processedBlob,
+        dimensions: { width: newWidth, height: newHeight }
+      }
+
+      setFile(processedFile)
+      
+      toast({
+        title: "Upscaling complete",
+        description: `Image upscaled to ${newWidth}×${newHeight} pixels`
+      })
+    } catch (error) {
+      toast({
+        title: "Upscaling failed",
+        description: error instanceof Error ? error.message : "Failed to upscale image",
+        variant: "destructive"
+      })
+    } finally {
+      setIsProcessing(false)
+      setProcessingProgress(0)
+    }
+  }
+
+  const downloadFile = () => {
+    if (!file?.blob) return
+
+    const link = document.createElement("a")
+    link.href = file.processedPreview || file.preview
+    link.download = file.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toast({
+      title: "Download started",
+      description: `${file.name} downloaded successfully`
+    })
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B"
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  }
+
+  // Mobile Sidebar Component
+  const MobileSidebar = () => (
+    <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+      <SheetContent side="bottom" className="h-[80vh] p-0">
+        <SheetHeader className="px-6 py-4 border-b bg-gray-50">
+          <SheetTitle className="flex items-center space-x-2">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            <span>Upscale Settings</span>
+          </SheetTitle>
+        </SheetHeader>
+        
+        <ScrollArea className="h-full">
+          <div className="p-6 space-y-6">
+            {upscaleOptions.map((option) => (
+              <div key={option.key} className="space-y-2">
+                <Label className="text-sm font-medium">{option.label}</Label>
+                
+                {option.type === "select" && (
+                  <Select
+                    value={toolOptions[option.key]?.toString()}
+                    onValueChange={(value) => setToolOptions(prev => ({ ...prev, [option.key]: value }))}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {option.selectOptions?.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+        
+        {/* Mobile Footer */}
+        <div className="p-4 border-t bg-white space-y-3">
+          <Button 
+            onClick={() => {
+              handleUpscale()
+              setIsMobileSidebarOpen(false)
+            }}
+            disabled={isProcessing || !file}
+            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+            size="lg"
+          >
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Upscaling...
+              </>
+            ) : (
+              <>
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Upscale Image
+              </>
+            )}
+          </Button>
+
 +          {file?.processed && (
+            <Button 
+              onClick={() => {
+                downloadFile()
+                setIsMobileSidebarOpen(false)
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-semibold"
+              size="lg"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Image
+            </Button>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+
+  // Show upload area if no file
+  if (showUploadArea && !file) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        
+        <div className="container mx-auto px-4 py-6 lg:py-8">
 +            <Button 
 +              onClick={downloadFile}
 +              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"

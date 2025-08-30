@@ -413,20 +413,10 @@ export function PDFToolsLayout({
         
             {/* Mobile Bottom Ad */}
             <div className="mb-6 lg:mb-8 lg:hidden">
-              <AdBanner 
-                adSlot="mobile-upload-bottom"
-                adFormat="auto"
-                className="w-full"
-              />
             </div>
 
             {/* Desktop Bottom Ad */}
             <div className="mb-8 hidden lg:block">
-              <AdBanner 
-                adSlot="upload-bottom-banner"
-                adFormat="horizontal"
-                className="max-w-4xl mx-auto"
-              />
             </div>
 
           
@@ -659,11 +649,6 @@ export function PDFToolsLayout({
             {/* Top Ad Banner */}
             <div className="bg-white">
               <div className="container mx-auto px-6 py-4 lg:py-2">
-                <AdBanner 
-                  adSlot="tool-header-banner"
-                  adFormat="auto"
-                  className="max-w-6xl mx-auto"
-                />
               </div>
             </div>
               

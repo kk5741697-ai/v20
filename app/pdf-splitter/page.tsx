@@ -102,8 +102,7 @@ async function splitPDF(files: any[], options: any) {
       { ...options, extractMode: "pages" }
     )
 
-    // Handle single file vs multiple files download logic
-    if (splitResults.length === 1 && !options.mergeRanges) {
+    if (splitResults.length === 1) {
       // Single file - direct download
       const blob = new Blob([splitResults[0]], { type: "application/pdf" })
       const downloadUrl = URL.createObjectURL(blob)
@@ -111,24 +110,7 @@ async function splitPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
-      }
-    } else if (options.mergeRanges && splitResults.length > 1) {
-      // Merge all ranges into one PDF
-      const tempFiles = splitResults.map((bytes, index) => {
-        return new File([bytes], `temp-${index}.pdf`, { type: "application/pdf" })
-      })
-      
-      const mergedBytes = await PDFProcessor.mergePDFs(tempFiles, {
-        addBookmarks: false,
-        preserveMetadata: options.preserveMetadata
-      })
-      
-      const mergedBlob = new Blob([mergedBytes], { type: "application/pdf" })
-      const downloadUrl = URL.createObjectURL(mergedBlob)
-      
-      return {
-        success: true,
-        downloadUrl,
+        filename: `${file.name.replace(".pdf", "")}_page_${pageNumbers[0]}.pdf`,
       }
     } else {
       // Multiple files - create ZIP
@@ -151,6 +133,7 @@ async function splitPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: `${file.name.replace(".pdf", "")}_split_pages.zip`,
       }
     }
   } catch (error) {

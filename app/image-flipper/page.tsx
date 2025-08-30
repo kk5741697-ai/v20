@@ -25,8 +25,7 @@ async function flipImages(files: any[], options: any) {
         const processedBlob = await ImageProcessor.resizeImage(
           file.originalFile || file.file,
           {
-            flipHorizontal: options.flipDirection === "horizontal" || options.flipDirection === "both",
-            flipVertical: options.flipDirection === "vertical" || options.flipDirection === "both",
+            flipDirection: options.flipDirection,
             outputFormat: "png",
           }
         )

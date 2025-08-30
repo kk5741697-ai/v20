@@ -63,7 +63,8 @@ async function protectPDF(files: any[], options: any) {
       }
     }
 
-    if (!options.userPassword?.trim() && !options.ownerPassword?.trim()) {
+    const password = options.userPassword?.trim() || options.ownerPassword?.trim()
+    if (!password) {
       return {
         success: false,
         error: "Please provide at least one password (user or owner)",
@@ -76,7 +77,6 @@ async function protectPDF(files: any[], options: any) {
     if (options.allowModifying) permissions.push("modify")
     if (options.allowAnnotations) permissions.push("annotate")
 
-    const password = options.userPassword?.trim() || options.ownerPassword?.trim()
 
     if (files.length === 1) {
       // Single file protection

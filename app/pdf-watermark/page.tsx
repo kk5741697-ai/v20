@@ -116,6 +116,7 @@ async function addWatermarkToPDF(files: any[], options: any) {
       return {
         success: true,
         downloadUrl,
+        filename: "watermarked_pdfs.zip",
       }
     }
   } catch (error) {

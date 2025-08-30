@@ -31,6 +31,10 @@ export interface ImageProcessingOptions {
   resizeWidth?: number
   resizeHeight?: number
   customRotation?: number
+  flipDirection?: string
+  watermarkImageUrl?: string
+  useImageWatermark?: boolean
+  fontSize?: number
   filters?: {
     brightness?: number
     contrast?: number
@@ -91,10 +95,14 @@ export class ImageProcessor {
           // Apply transformations
           ctx.save()
           
-          // Handle flipping
+          // Handle flipping based on flipDirection
           let scaleX = 1, scaleY = 1
-          if (options.flipHorizontal) scaleX = -1
-          if (options.flipVertical) scaleY = -1
+          if (options.flipDirection === "horizontal" || options.flipDirection === "both") {
+            scaleX = -1
+          }
+          if (options.flipDirection === "vertical" || options.flipDirection === "both") {
+            scaleY = -1
+          }
           
           if (scaleX !== 1 || scaleY !== 1) {
             ctx.translate(canvas.width / 2, canvas.height / 2)
@@ -217,7 +225,7 @@ export class ImageProcessor {
           canvas.width = canvasWidth
           canvas.height = canvasHeight
 
-          // Apply background color for JPEG
+          // Add background color for JPEG
           if (options.outputFormat === "jpeg") {
             ctx.fillStyle = options.backgroundColor || "#ffffff"
             ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -452,74 +460,23 @@ export class ImageProcessor {
       }
 
       const img = new Image()
-      img.onload = () => {
+      img.onload = async () => {
         try {
           canvas.width = img.naturalWidth
           canvas.height = img.naturalHeight
 
           ctx.drawImage(img, 0, 0)
 
-          // Better font size calculation
-          const baseFontSize = Math.min(canvas.width, canvas.height) * 0.08
-          const fontSizeMultiplier = (options.quality || 50) / 50
-          const fontSize = Math.max(12, baseFontSize * fontSizeMultiplier)
-          
-          ctx.font = `bold ${fontSize}px Arial`
-          ctx.fillStyle = options.textColor || "#ffffff"
-          ctx.globalAlpha = Math.max(0.1, Math.min(1.0, options.watermarkOpacity || 0.5))
-
-          // Position watermark
-          let x = canvas.width / 2
-          let y = canvas.height / 2
-
-          switch (options.position) {
-            case "top-left":
-              x = fontSize
-              y = fontSize * 2
-              ctx.textAlign = "left"
-              break
-            case "top-right":
-              x = canvas.width - fontSize
-              y = fontSize * 2
-              ctx.textAlign = "right"
-              break
-            case "bottom-left":
-              x = fontSize
-              y = canvas.height - fontSize
-              ctx.textAlign = "left"
-              break
-            case "bottom-right":
-              x = canvas.width - fontSize
-              y = canvas.height - fontSize
-              ctx.textAlign = "right"
-              break
-            case "diagonal":
-              ctx.save()
-              ctx.translate(canvas.width / 2, canvas.height / 2)
-              ctx.rotate(-Math.PI / 4)
-              x = 0
-              y = 0
-              ctx.textAlign = "center"
-              break
-            default: // center
-              ctx.textAlign = "center"
-              break
-          }
-
-          ctx.textBaseline = "middle"
-
-          // Add text shadow if enabled
-          if (options.shadowEnabled) {
-            ctx.shadowColor = "rgba(0, 0, 0, 0.8)"
-            ctx.shadowBlur = 6
-            ctx.shadowOffsetX = 3
-            ctx.shadowOffsetY = 3
-          }
-
-          ctx.fillText(watermarkText, x, y)
-
-          if (options.position === "diagonal") {
-            ctx.restore()
+          // Handle image watermark if specified
+          if (options.useImageWatermark && options.watermarkImageUrl) {
+            try {
+              await this.addImageWatermark(ctx, canvas, options.watermarkImageUrl, options)
+            } catch (error) {
+              console.warn("Failed to add image watermark, falling back to text:", error)
+              this.applyTextWatermark(ctx, canvas, watermarkText, options)
+            }
+          } else {
+            this.applyTextWatermark(ctx, canvas, watermarkText, options)
           }
 
           const quality = Math.max(0.1, Math.min(1.0, (options.quality || 90) / 100))
@@ -544,6 +501,72 @@ export class ImageProcessor {
       img.onerror = () => reject(new Error("Failed to load image"))
       img.crossOrigin = "anonymous"
       img.src = URL.createObjectURL(file)
+    })
+  }
+
+  private static async addImageWatermark(
+    ctx: CanvasRenderingContext2D, 
+    canvas: HTMLCanvasElement, 
+    imageUrl: string, 
+    options: ImageProcessingOptions
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const watermarkImg = new Image()
+      watermarkImg.crossOrigin = "anonymous"
+      
+      watermarkImg.onload = () => {
+        try {
+          ctx.save()
+          ctx.globalAlpha = options.watermarkOpacity || 0.5
+
+          // Calculate watermark size (20% of canvas by default)
+          const watermarkSize = Math.min(canvas.width, canvas.height) * 0.2
+          const aspectRatio = watermarkImg.naturalWidth / watermarkImg.naturalHeight
+          
+          let watermarkWidth = watermarkSize
+          let watermarkHeight = watermarkSize / aspectRatio
+          
+          if (aspectRatio < 1) {
+            watermarkHeight = watermarkSize
+            watermarkWidth = watermarkSize * aspectRatio
+          }
+
+          // Position watermark
+          let x: number, y: number
+
+          switch (options.position) {
+            case "top-left":
+              x = 20
+              y = 20
+              break
+            case "top-right":
+              x = canvas.width - watermarkWidth - 20
+              y = 20
+              break
+            case "bottom-left":
+              x = 20
+              y = canvas.height - watermarkHeight - 20
+              break
+            case "bottom-right":
+              x = canvas.width - watermarkWidth - 20
+              y = canvas.height - watermarkHeight - 20
+              break
+            default: // center
+              x = (canvas.width - watermarkWidth) / 2
+              y = (canvas.height - watermarkHeight) / 2
+              break
+          }
+
+          ctx.drawImage(watermarkImg, x, y, watermarkWidth, watermarkHeight)
+          ctx.restore()
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      watermarkImg.onerror = () => reject(new Error("Failed to load watermark image"))
+      watermarkImg.src = imageUrl
     })
   }
 
@@ -845,94 +868,20 @@ export class ImageProcessor {
       const img = new Image()
       img.onload = () => {
         try {
-          let { width: targetWidth, height: targetHeight } = options
-          const { naturalWidth: originalWidth, naturalHeight: originalHeight } = img
-
-          // Handle resizing during conversion
-          if (options.resizeWidth && options.resizeWidth > 0) {
-            targetWidth = options.resizeWidth
-          }
-          if (options.resizeHeight && options.resizeHeight > 0) {
-            targetHeight = options.resizeHeight
-          }
-
-          if (targetWidth && targetHeight) {
-            if (options.maintainAspectRatio) {
-              const aspectRatio = originalWidth / originalHeight
-              if (targetWidth / targetHeight > aspectRatio) {
-                targetWidth = targetHeight * aspectRatio
-              } else {
-                targetHeight = targetWidth / aspectRatio
-              }
-            }
-          } else {
-            targetWidth = originalWidth
-            targetHeight = originalHeight
-          }
-
-          canvas.width = Math.max(1, Math.floor(targetWidth))
-          canvas.height = Math.max(1, Math.floor(targetHeight))
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
 
           // Add background color for formats that don't support transparency
-          if (options.backgroundColor && outputFormat !== "png") {
-            ctx.fillStyle = options.backgroundColor
+          if (outputFormat === "jpeg") {
+            ctx.fillStyle = "#ffffff"
             ctx.fillRect(0, 0, canvas.width, canvas.height)
-          }
-
-          // Apply transformations
-          ctx.save()
-          
-          // Handle flipping
-          let scaleX = 1, scaleY = 1
-          if (options.flipHorizontal) scaleX = -1
-          if (options.flipVertical) scaleY = -1
-          
-          if (scaleX !== 1 || scaleY !== 1) {
-            ctx.translate(canvas.width / 2, canvas.height / 2)
-            ctx.scale(scaleX, scaleY)
-            ctx.translate(-canvas.width / 2, -canvas.height / 2)
-          }
-
-          // Handle rotation (including custom rotation)
-          const rotationAngle = options.customRotation !== undefined ? options.customRotation : (options.rotation || 0)
-          if (rotationAngle) {
-            const rotAngle = (rotationAngle * Math.PI) / 180
-            ctx.translate(canvas.width / 2, canvas.height / 2)
-            ctx.rotate(rotAngle)
-            ctx.translate(-canvas.width / 2, -canvas.height / 2)
-          }
-
-          // Apply filters if specified
-          if (options.filters) {
-            const filters = []
-            const { brightness, contrast, saturation, blur, sepia, grayscale } = options.filters
-
-            if (brightness !== undefined && brightness !== 100) {
-              filters.push(`brightness(${Math.max(0, Math.min(300, brightness))}%)`)
-            }
-            if (contrast !== undefined && contrast !== 100) {
-              filters.push(`contrast(${Math.max(0, Math.min(300, contrast))}%)`)
-            }
-            if (saturation !== undefined && saturation !== 100) {
-              filters.push(`saturate(${Math.max(0, Math.min(300, saturation))}%)`)
-            }
-            if (blur !== undefined && blur > 0) {
-              filters.push(`blur(${Math.max(0, Math.min(50, blur))}px)`)
-            }
-            if (sepia) filters.push("sepia(100%)")
-            if (grayscale) filters.push("grayscale(100%)")
-
-            if (filters.length > 0) {
-              ctx.filter = filters.join(" ")
-            }
           }
 
           // Enhanced rendering
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = "high"
           
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-          ctx.restore()
+          ctx.drawImage(img, 0, 0)
 
           const quality = Math.max(0.1, Math.min(1.0, (options.quality || 90) / 100))
           const mimeType = `image/${outputFormat}`

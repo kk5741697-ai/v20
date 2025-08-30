@@ -83,6 +83,8 @@ async function addWatermarkToImages(files: any[], options: any) {
           position: options.position,
           textColor: options.textColor,
           fontSize: options.fontSize,
+          useImageWatermark: options.useImageWatermark,
+          watermarkImageUrl: options.watermarkImageUrl,
           watermarkImage: options.useImageWatermark ? options.watermarkImageUrl : undefined,
         }
         

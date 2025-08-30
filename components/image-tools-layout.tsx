@@ -524,7 +524,6 @@ export function ImageToolsLayout({
   if (showUploadArea && files.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         
         <div className="container mx-auto px-4 py-6 lg:py-8">
           <div className="text-center mb-6 lg:mb-8">

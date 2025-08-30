@@ -746,7 +746,10 @@ export function ImageToolsLayout({
               )}
             </div>
           </div>
-<div className="bg-white border-b">
+
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-1 lg:py-2">
           <AdBanner 
             adSlot="tool-header-banner"
@@ -756,8 +759,6 @@ export function ImageToolsLayout({
           />
         </div>
       </div>
-          <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-full">
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {files.map((file) => (
                   <Card key={file.id} className="relative overflow-hidden">

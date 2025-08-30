@@ -79,14 +79,33 @@ async function upscaleImages(files: any[], options: any) {
       }
     }
 
+    // Enhanced safety checks
+    const totalSize = files.reduce((sum: number, f: any) => sum + f.size, 0)
+    if (totalSize > 100 * 1024 * 1024) { // 100MB total limit
+      return {
+        success: false,
+        error: "Total file size too large. Maximum 100MB total allowed.",
+      }
+    }
+
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         try {
           const scaleFactor = parseFloat(options.scaleFactor || "2")
           
+          // Enhanced safety check for individual files
+          if (file.size > 25 * 1024 * 1024) {
+            throw new Error(`File ${file.name} is too large (${Math.round(file.size / (1024 * 1024))}MB). Maximum 25MB per file.`)
+          }
+          
+          // Check image dimensions
+          if (file.dimensions && file.dimensions.width * file.dimensions.height > 1024 * 1024) {
+            throw new Error(`Image resolution too high (${file.dimensions.width}x${file.dimensions.height}). Maximum 1MP allowed.`)
+          }
+          
           const ultimateOptions = {
-            scaleFactor,
-            maxOutputDimension: 2048,
+            scaleFactor: Math.min(scaleFactor, 3), // Limit to 3x
+            maxOutputDimension: 1536, // Reduced from 2048
             primaryAlgorithm: options.primaryAlgorithm || "auto",
             secondaryAlgorithm: "lanczos",
             hybridMode: true,
@@ -98,7 +117,7 @@ async function upscaleImages(files: any[], options: any) {
             colorEnhancement: true,
             contrastBoost: 10,
             multiPass: true,
-            memoryOptimized: true,
+            memoryOptimized: true, // Always enable memory optimization
             chunkProcessing: true,
             outputFormat: options.outputFormat || "png",
             quality: 95,
@@ -108,10 +127,18 @@ async function upscaleImages(files: any[], options: any) {
             debugMode: false
           }
 
+          // Add timeout and abort signal support
+          const abortController = new AbortController()
+          const timeoutId = setTimeout(() => {
+            abortController.abort()
+          }, 300000) // 5 minute timeout
+
           const result = await UltimateImageUpscaler.upscaleImage(
             file.originalFile || file.file,
             ultimateOptions
           )
+          
+          clearTimeout(timeoutId)
 
           const processedUrl = URL.createObjectURL(result.processedBlob)
         
@@ -141,7 +168,8 @@ async function upscaleImages(files: any[], options: any) {
           return {
             ...file,
             processed: false,
-            error: error instanceof Error ? error.message : "Upscaling failed"
+            error: error instanceof Error ? error.message : "Upscaling failed",
+            processingTime: 0
           }
         }
       })
@@ -158,9 +186,16 @@ async function upscaleImages(files: any[], options: any) {
     if (successfulFiles.length === 0) {
       return {
         success: false,
-        error: "All files failed to upscale. Please try with smaller images (under 50MB) or lower scale factors.",
+        error: "All files failed to upscale. Please try with smaller images (under 25MB) or lower scale factors.",
       }
     }
+    
+    // Force cleanup after processing
+    setTimeout(() => {
+      if ('gc' in window && typeof (window as any).gc === 'function') {
+        (window as any).gc()
+      }
+    }, 1000)
     
     return {
       success: true,

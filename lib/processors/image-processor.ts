@@ -27,14 +27,70 @@ export interface ImageProcessingOptions {
   customRotation?: number
   cropArea?: { x: number; y: number; width: number; height: number }
   cropMode?: "percentage" | "pixels"
+  // Enhanced processing options
+  memoryOptimized?: boolean
+  chunkProcessing?: boolean
+  progressCallback?: (progress: number, stage: string) => void
+  abortSignal?: AbortSignal
 }
 
 export class ImageProcessor {
-  private static readonly MAX_SAFE_PIXELS = 2048 * 2048 // 4MP max for stability
+  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // 2.3MP max for stability
   private static readonly MAX_CANVAS_SIZE = 4096 // Max canvas dimension
+  private static readonly CHUNK_SIZE = 256
+  private static readonly MAX_MEMORY_MB = 100
   
+  // Enhanced memory monitoring
+  private static checkMemoryUsage(): number {
+    if ('memory' in performance) {
+      const memory = (performance as any).memory
+      return memory.usedJSHeapSize / (1024 * 1024)
+    }
+    return 0
+  }
+
+  private static async forceGarbageCollection(): Promise<void> {
+    if ('gc' in window && typeof (window as any).gc === 'function') {
+      (window as any).gc()
+    }
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+
+  private static async processWithMemoryManagement<T>(
+    operation: () => Promise<T>,
+    options?: ImageProcessingOptions
+  ): Promise<T> {
+    const initialMemory = this.checkMemoryUsage()
+    
+    try {
+      // Check if we need to abort
+      if (options?.abortSignal?.aborted) {
+        throw new Error("Operation cancelled")
+      }
+      
+      const result = await operation()
+      
+      // Monitor memory after operation
+      const finalMemory = this.checkMemoryUsage()
+      const memoryIncrease = finalMemory - initialMemory
+      
+      if (memoryIncrease > 50) { // If memory increased by more than 50MB
+        await this.forceGarbageCollection()
+      }
+      
+      return result
+    } catch (error) {
+      // Cleanup on error
+      await this.forceGarbageCollection()
+      throw error
+    }
+  }
+
   static async resizeImage(file: File, options: ImageProcessingOptions): Promise<Blob> {
-    return this.processImageSafely(file, (canvas, ctx, img) => {
+    return this.processWithMemoryManagement(async () => {
+      return this.processImageSafely(file, async (canvas, ctx, img) => {
+        options.progressCallback?.(20, "Calculating dimensions")
+        
       const targetWidth = options.width || img.naturalWidth
       const targetHeight = options.height || img.naturalHeight
       
@@ -228,6 +284,8 @@ export class ImageProcessor {
           case "bottom-left":
             x = fontSize
             y = canvas.height - fontSize
+        options.progressCallback?.(40, "Resizing image")
+        
             ctx.textAlign = "left"
             break
           case "bottom-right":
@@ -237,9 +295,14 @@ export class ImageProcessor {
             break
         }
         
+        options.progressCallback?.(70, "Rendering image")
+        
         ctx.fillText(watermarkText, x, y)
         ctx.restore()
       }
+        
+        options.progressCallback?.(90, "Finalizing")
+      }, options)
     }, options)
   }
 
@@ -269,29 +332,71 @@ export class ImageProcessor {
 
       const img = new Image()
       img.onload = () => {
+        options.progressCallback?.(70, "Rendering converted image")
+        
         try {
+          options.progressCallback?.(10, "Loading image")
+          
           // Additional safety check for image dimensions
-          if (img.naturalWidth * img.naturalHeight > this.MAX_SAFE_PIXELS) {
+    return this.processWithMemoryManagement(async () => {
+            options.progressCallback?.(15, "Scaling large image")
+            
+        
+        options.progressCallback?.(90, "Finalizing conversion")
+      }, { ...options, outputFormat: format })
+    }, options)
+        options.progressCallback?.(20, "Calculating compression")
+        
             const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (img.naturalWidth * img.naturalHeight))
-            const tempCanvas = document.createElement("canvas")
+    return this.processWithMemoryManagement(async () => {
+      return this.processImageSafely(file, async (canvas, ctx, img) => {
+        options.progressCallback?.(20, "Calculating crop area")
+        
             const tempCtx = tempCanvas.getContext("2d")!
             
-            tempCanvas.width = Math.floor(img.naturalWidth * scale)
-            tempCanvas.height = Math.floor(img.naturalHeight * scale)
+            scaledImg.onload = async () => {
+              await processor(canvas, ctx, scaledImg)
             
+        options.progressCallback?.(50, "Compressing image")
+        
             tempCtx.imageSmoothingEnabled = true
             tempCtx.imageSmoothingQuality = "high"
             tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
-            
+          await processor(canvas, ctx, img)
+        options.progressCallback?.(60, "Cropping image")
+        
+          // Enhanced error handling with cleanup
+          this.cleanupCanvas(canvas)
             // Create new image from scaled canvas
             const scaledImg = new Image()
-            scaledImg.onload = () => {
+        
+        options.progressCallback?.(90, "Finalizing compression")
+      }, options)
+    }, options)
               processor(canvas, ctx, scaledImg)
               this.finalizeCanvas(canvas, options, resolve, reject)
             }
-            scaledImg.src = tempCanvas.toDataURL()
+    return this.processWithMemoryManagement(async () => {
+  private static cleanupCanvas(canvas: HTMLCanvasElement): void {
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+    canvas.width = 1
+    canvas.height = 1
+  }
+
+        
+        options.progressCallback?.(90, "Finalizing crop")
+      }, options)
+    }, options)
+        options.progressCallback?.(30, "Converting format")
+        
             return
-          }
+    return this.processWithMemoryManagement(async () => {
+      return this.processImageSafely(file, async (canvas, ctx, img) => {
+        options.progressCallback?.(20, "Calculating rotation")
+        
           
           processor(canvas, ctx, img)
           this.finalizeCanvas(canvas, options, resolve, reject)
@@ -302,6 +407,8 @@ export class ImageProcessor {
 
       img.onerror = () => reject(new Error("Failed to load image"))
       img.crossOrigin = "anonymous"
+        options.progressCallback?.(60, "Rotating image")
+        
       img.src = URL.createObjectURL(file)
     })
   }
@@ -311,37 +418,81 @@ export class ImageProcessor {
     targetHeight: number, 
     maintainAspectRatio = true,
     aspectRatio?: number
-  ) {
+        
+        options.progressCallback?.(90, "Finalizing rotation")
+      }, options)
+      options.progressCallback?.(95, "Creating output")
+      
+    }, options)
     let safeWidth = Math.min(targetWidth, this.MAX_CANVAS_SIZE)
     let safeHeight = Math.min(targetHeight, this.MAX_CANVAS_SIZE)
     
-    // Ensure we don't exceed pixel limit
+    return this.processWithMemoryManagement(async () => {
+      return this.processImageSafely(file, async (canvas, ctx, img) => {
+            options.progressCallback?.(100, "Complete")
+        options.progressCallback?.(20, "Preparing filters")
+        
     if (safeWidth * safeHeight > this.MAX_SAFE_PIXELS) {
       const scale = Math.sqrt(this.MAX_SAFE_PIXELS / (safeWidth * safeHeight))
+          
+          // Cleanup canvas after blob creation
+          setTimeout(() => {
+            this.cleanupCanvas(canvas)
+          }, 100)
       safeWidth = Math.floor(safeWidth * scale)
       safeHeight = Math.floor(safeHeight * scale)
     }
     
     // Maintain aspect ratio if requested
+      this.cleanupCanvas(canvas)
     if (maintainAspectRatio && aspectRatio) {
       if (safeWidth / safeHeight > aspectRatio) {
         safeWidth = Math.floor(safeHeight * aspectRatio)
       } else {
         safeHeight = Math.floor(safeWidth / aspectRatio)
       }
+    // Clean up blob URLs more aggressively
+    const images = document.querySelectorAll('img[src^="blob:"]')
+    const videos = document.querySelectorAll('video[src^="blob:"]')
+    const canvases = document.querySelectorAll('canvas')
+    
+    // Revoke blob URLs that are no longer in use
+    images.forEach(img => {
+      if (img instanceof HTMLImageElement) {
+        // Check if image is still visible or needed
+        const rect = img.getBoundingClientRect()
+        const isVisible = rect.width > 0 && rect.height > 0
+        const isInViewport = rect.top < window.innerHeight && rect.bottom > 0
+        
+        if (!isVisible || !isInViewport) {
+          URL.revokeObjectURL(img.src)
+        }
+      }
+    })
+    
+    videos.forEach(video => {
+      if (video instanceof HTMLVideoElement) {
+        URL.revokeObjectURL(video.src)
+      }
+    })
+    
+    // Clear unused canvases
+    canvases.forEach(canvas => {
+      if (canvas instanceof HTMLCanvasElement) {
+        const rect = canvas.getBoundingClientRect()
+        if (rect.width === 0 || rect.height === 0) {
+          this.cleanupCanvas(canvas)
+        }
+      }
+    })
+    
     }
     
     return { safeWidth: Math.max(1, safeWidth), safeHeight: Math.max(1, safeHeight) }
   }
-
-  private static getOptimalCompressionSize(
-    originalWidth: number, 
-    originalHeight: number, 
-    level: string
-  ) {
-    let scale = 1
-    
     switch (level) {
+        options.progressCallback?.(50, "Applying filters")
+        
       case "low":
         scale = 0.95
         break
@@ -349,20 +500,28 @@ export class ImageProcessor {
         scale = 0.8
         break
       case "high":
-        scale = 0.6
+        
+        options.progressCallback?.(90, "Finalizing filters")
+      }, options)
+    }, options)
         break
       case "maximum":
         scale = 0.4
         break
     }
-    
+    processor: (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, img: HTMLImageElement) => Promise<void> | void,
     const width = Math.floor(originalWidth * scale)
     const height = Math.floor(originalHeight * scale)
     
-    return this.calculateSafeDimensions(width, height, true, originalWidth / originalHeight)
-  }
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      throw new Error("Image too large. Please use an image smaller than 50MB.")
 
   private static finalizeCanvas(
+    // Check current memory usage
+    const currentMemory = this.checkMemoryUsage()
+    if (currentMemory > this.MAX_MEMORY_MB) {
+      await this.forceGarbageCollection()
+    }
     canvas: HTMLCanvasElement,
     options: ImageProcessingOptions,
     resolve: (blob: Blob) => void,
@@ -403,4 +562,4 @@ export class ImageProcessor {
       }
     })
   }
-}
+      img.onload = async () => {

@@ -35,11 +35,55 @@ export interface UpscaleResult {
 }
 
 export class UltimateImageUpscaler {
-  private static readonly MAX_SAFE_PIXELS = 1536 * 1536 // 2.3MP for stability
+  private static readonly MAX_SAFE_PIXELS = 1024 * 1024 // 1MP for stability
   private static readonly MAX_OUTPUT_PIXELS = 2048 * 2048 // 4MP max output
-  private static readonly MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB absolute limit
+  private static readonly MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB absolute limit
   private static readonly CHUNK_SIZE = 256 * 256 // Process in smaller chunks
+  private static readonly MAX_MEMORY_MB = 120
+  private static readonly PROCESSING_TIMEOUT = 300000 // 5 minutes max
   
+  // Enhanced memory monitoring
+  private static checkMemoryUsage(): number {
+    if ('memory' in performance) {
+      const memory = (performance as any).memory
+      return memory.usedJSHeapSize / (1024 * 1024)
+    }
+    return 0
+  }
+
+  private static async forceGarbageCollection(): Promise<void> {
+    if ('gc' in window && typeof (window as any).gc === 'function') {
+      (window as any).gc()
+    }
+    
+    // Additional cleanup
+    const images = document.querySelectorAll('img[src^="blob:"]')
+    images.forEach(img => {
+      if (img instanceof HTMLImageElement) {
+        const rect = img.getBoundingClientRect()
+        if (rect.width === 0 || rect.height === 0) {
+          URL.revokeObjectURL(img.src)
+        }
+      }
+    })
+    
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  private static async processWithTimeout<T>(
+    operation: () => Promise<T>,
+    timeoutMs: number = this.PROCESSING_TIMEOUT
+  ): Promise<T> {
+    return Promise.race([
+      operation(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Processing timeout after ${timeoutMs / 1000} seconds`))
+        }, timeoutMs)
+      })
+    ])
+  }
+
   static async upscaleImage(
     imageFile: File,
     options: UltimateUpscaleOptions = {}
@@ -49,17 +93,26 @@ export class UltimateImageUpscaler {
     try {
       // Enhanced safety checks
       if (imageFile.size > this.MAX_FILE_SIZE) {
-        throw new Error(`File too large (${Math.round(imageFile.size / (1024 * 1024))}MB). Maximum 50MB allowed.`)
+        throw new Error(`File too large (${Math.round(imageFile.size / (1024 * 1024))}MB). Maximum 25MB allowed.`)
       }
 
       if (!imageFile.type.startsWith('image/')) {
         throw new Error("Invalid file type. Please upload an image file.")
       }
 
+      // Check initial memory
+      const initialMemory = this.checkMemoryUsage()
+      if (initialMemory > this.MAX_MEMORY_MB) {
+        await this.forceGarbageCollection()
+      }
+
       options.progressCallback?.(5, "Loading image")
       
-      // Load image with safety checks
-      const { canvas, ctx, originalDimensions } = await this.loadImageSafely(imageFile, options)
+      // Load image with safety checks and timeout
+      const { canvas, ctx, originalDimensions } = await this.processWithTimeout(
+        () => this.loadImageSafely(imageFile, options),
+        30000 // 30 second timeout for loading
+      )
       
       options.progressCallback?.(15, "Analyzing image content")
       
@@ -73,18 +126,21 @@ export class UltimateImageUpscaler {
       const { actualScaleFactor, targetDimensions } = this.calculateSafeScale(
         canvas.width,
         canvas.height,
-        options.scaleFactor || 2,
+        Math.min(options.scaleFactor || 2, 3), // Max 3x scale
         options.maxOutputDimension
       )
       
-      if (actualScaleFactor < 1.1) {
+      if (actualScaleFactor < 1.05) {
         throw new Error("Scale factor too small or image too large for upscaling")
       }
       
       options.progressCallback?.(35, "Running primary AI algorithm")
       
       // Apply primary upscaling algorithm
-      const primaryResult = await this.applyPrimaryUpscaling(canvas, actualScaleFactor, analysis, options)
+      const primaryResult = await this.processWithTimeout(
+        () => this.applyPrimaryUpscaling(canvas, actualScaleFactor, analysis, options),
+        120000 // 2 minute timeout for upscaling
+      )
       
       options.progressCallback?.(65, "Applying enhancements")
       
@@ -185,14 +241,14 @@ export class UltimateImageUpscaler {
     requestedScale: number,
     maxOutputDimension?: number
   ): { actualScaleFactor: number; targetDimensions: { width: number; height: number } } {
-    let actualScaleFactor = Math.min(requestedScale, 4) // Max 4x scale
+    let actualScaleFactor = Math.min(requestedScale, 3) // Max 3x scale for stability
     
     // Calculate target dimensions
     let targetWidth = Math.floor(currentWidth * actualScaleFactor)
     let targetHeight = Math.floor(currentHeight * actualScaleFactor)
     
     // Apply max output dimension limit
-    const maxDim = Math.min(maxOutputDimension || 2048, 2048)
+    const maxDim = Math.min(maxOutputDimension || 1536, 1536)
     if (targetWidth > maxDim || targetHeight > maxDim) {
       const scale = Math.min(maxDim / targetWidth, maxDim / targetHeight)
       actualScaleFactor *= scale
@@ -200,17 +256,18 @@ export class UltimateImageUpscaler {
       targetHeight = Math.floor(currentHeight * actualScaleFactor)
     }
     
-    // Check output pixel limit
-    if (targetWidth * targetHeight > this.MAX_OUTPUT_PIXELS) {
-      const scale = Math.sqrt(this.MAX_OUTPUT_PIXELS / (targetWidth * targetHeight))
+    // Check output pixel limit with more conservative limit
+    const maxOutputPixels = Math.min(this.MAX_OUTPUT_PIXELS, 1536 * 1536)
+    if (targetWidth * targetHeight > maxOutputPixels) {
+      const scale = Math.sqrt(maxOutputPixels / (targetWidth * targetHeight))
       actualScaleFactor *= scale
       targetWidth = Math.floor(currentWidth * actualScaleFactor)
       targetHeight = Math.floor(currentHeight * actualScaleFactor)
     }
     
-    // Ensure minimum scale
-    if (actualScaleFactor < 1.1) {
-      actualScaleFactor = 1.1
+    // Ensure minimum scale with lower threshold
+    if (actualScaleFactor < 1.05) {
+      actualScaleFactor = 1.05
       targetWidth = Math.floor(currentWidth * actualScaleFactor)
       targetHeight = Math.floor(currentHeight * actualScaleFactor)
     }
@@ -393,6 +450,12 @@ export class UltimateImageUpscaler {
     analysis: any,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
+    // Memory check before processing
+    const memoryUsage = this.checkMemoryUsage()
+    if (memoryUsage > this.MAX_MEMORY_MB) {
+      await this.forceGarbageCollection()
+    }
+    
     const algorithm = options.primaryAlgorithm || "auto"
     
     if (algorithm === "auto") {
@@ -564,6 +627,7 @@ export class UltimateImageUpscaler {
     scaleFactor: number,
     options: UltimateUpscaleOptions
   ): Promise<HTMLCanvasElement> {
+    // Enhanced memory management for Lanczos
     // High-quality Lanczos upscaling
     const srcCtx = sourceCanvas.getContext("2d")!
     const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
@@ -589,8 +653,9 @@ export class UltimateImageUpscaler {
       return (3 * Math.sin(piX) * Math.sin(piX / 3)) / (piX * piX)
     }
     
-    // Process in chunks to prevent hanging
-    const chunkSize = options.chunkProcessing ? 200 : targetHeight
+    // Process in smaller chunks to prevent hanging
+    const chunkSize = options.chunkProcessing ? 100 : Math.min(targetHeight, 200)
+    let processedRows = 0
     
     for (let startY = 0; startY < targetHeight; startY += chunkSize) {
       const endY = Math.min(startY + chunkSize, targetHeight)
@@ -602,9 +667,9 @@ export class UltimateImageUpscaler {
           
           let r = 0, g = 0, b = 0, a = 0, weightSum = 0
           
-          // 6x6 neighborhood for Lanczos-3
-          for (let dy = -2; dy <= 3; dy++) {
-            for (let dx = -2; dx <= 3; dx++) {
+          // Reduced neighborhood for better performance
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
               const sampleX = Math.floor(srcX) + dx
               const sampleY = Math.floor(srcY) + dy
               
@@ -629,11 +694,27 @@ export class UltimateImageUpscaler {
           resultData[targetIndex + 2] = Math.max(0, Math.min(255, b / weightSum))
           resultData[targetIndex + 3] = Math.max(0, Math.min(255, a / weightSum))
         }
+        
+        processedRows++
+        
+        // Update progress more frequently
+        if (processedRows % 10 === 0) {
+          const progress = 40 + (processedRows / targetHeight) * 20
+          options.progressCallback?.(progress, `Upscaling... ${Math.round((processedRows / targetHeight) * 100)}%`)
+        }
       }
       
-      // Allow browser to breathe between chunks
+      // Enhanced breathing room and memory check
       if (startY + chunkSize < targetHeight) {
-        await new Promise(resolve => setTimeout(resolve, 1))
+        await new Promise(resolve => setTimeout(resolve, 5))
+        
+        // Memory check every few chunks
+        if ((startY / chunkSize) % 5 === 0) {
+          const currentMemory = this.checkMemoryUsage()
+          if (currentMemory > this.MAX_MEMORY_MB) {
+            await this.forceGarbageCollection()
+          }
+        }
       }
     }
     
@@ -658,8 +739,8 @@ export class UltimateImageUpscaler {
     resultCtx.imageSmoothingEnabled = true
     resultCtx.imageSmoothingQuality = "high"
     
-    // Multi-pass for better quality on large scales
-    if (scaleFactor > 2.5) {
+            options.maxOutputDimension || 1536,
+            1536
       const intermediateScale = Math.sqrt(scaleFactor)
       const intermediateCanvas = document.createElement("canvas")
       const intermediateCtx = intermediateCanvas.getContext("2d")!
@@ -1156,6 +1237,14 @@ export class UltimateImageUpscaler {
           artifactSum++
         }
         
+          // Additional memory-based scaling
+          const estimatedMemory = (workingWidth * workingHeight * 4) / (1024 * 1024)
+          if (estimatedMemory > 50) { // If estimated memory > 50MB
+            const memoryScale = Math.sqrt(50 / estimatedMemory)
+            workingWidth = Math.floor(workingWidth * memoryScale)
+            workingHeight = Math.floor(workingHeight * memoryScale)
+          }
+          
         sampleCount++
       }
     }
@@ -1199,12 +1288,23 @@ export class UltimateImageUpscaler {
       canvas.width = 1
       canvas.height = 1
     })
-    
+    // Enhanced garbage collection
     // Force garbage collection if available
     if ('gc' in window && typeof (window as any).gc === 'function') {
       setTimeout(() => {
         (window as any).gc()
       }, 100)
+      
+      // Additional cleanup
+      const images = document.querySelectorAll('img[src^="blob:"]')
+      images.forEach(img => {
+        if (img instanceof HTMLImageElement) {
+          const rect = img.getBoundingClientRect()
+          if (rect.width === 0 || rect.height === 0) {
+            URL.revokeObjectURL(img.src)
+          }
+        }
+      })
     }
   }
 }

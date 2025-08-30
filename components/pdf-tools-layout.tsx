@@ -512,7 +512,7 @@ export function PDFToolsLayout({
 
       {/* Top Ad Banner */}
       <div className="bg-white">
-        <div className="container mx-auto px-4 py-1 lg:py-2">
+        <div className="container mx-auto px-4 py-1 lg:py-3">
           <AdBanner 
             adSlot="tool-header-banner"
             adFormat="auto"

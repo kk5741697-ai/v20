@@ -601,7 +601,7 @@ export function ImageToolsLayout({
             </Button>
           </div>
         </div>
-<div className="bg-white border-b">
+<div className="bg-white">
         <div className="container mx-auto px-4 py-1 lg:py-2">
           <AdBanner 
             adSlot="tool-header-banner"
@@ -749,7 +749,7 @@ export function ImageToolsLayout({
 
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full">
-              <div className="bg-white border-b">
+              <div className="bg-white">
                 <div className="container mx-auto px-4 py-1 lg:py-2">
                   <AdBanner 
                     adSlot="tool-header-banner"

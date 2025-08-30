@@ -6,6 +6,7 @@ import { AdvancedBackgroundProcessor } from "@/lib/processors/advanced-backgroun
 
 const backgroundOptions = [
   {
+  }
   {
     key: "outputFormat",
     label: "Output Format",

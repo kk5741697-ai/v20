@@ -487,17 +487,6 @@ export function PDFToolsLayout({
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
-      {/* Top Ad Banner */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-1 lg:py-2">
-          <AdBanner 
-            adSlot="tool-header-banner"
-            adFormat="auto"
-            className="max-w-6xl mx-auto"
-          />
-        </div>
-      </div>
 
       {/* Mobile Layout */}
       <div className="lg:hidden">
@@ -521,6 +510,18 @@ export function PDFToolsLayout({
           </div>
         </div>
 
+      {/* Top Ad Banner */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-1 lg:py-2">
+          <AdBanner 
+            adSlot="tool-header-banner"
+            adFormat="auto"
+            className="max-w-6xl mx-auto"
+          />
+        </div>
+      </div>
+
+        
         {/* Mobile Content */}
         <div className="p-4 space-y-4 min-h-[60vh]">
           {files.map((file) => (

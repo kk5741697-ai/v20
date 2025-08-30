@@ -377,14 +377,6 @@ export function PDFToolsLayout({
               </div>
             ))}
 
-            {/* Mobile Ad */}
-            <div className="py-4">
-              <AdBanner 
-                adSlot="mobile-pdf-sidebar"
-                adFormat="auto"
-                className="w-full"
-              />
-            </div>
           </div>
         </ScrollArea>
         

@@ -887,13 +887,7 @@ export function PDFToolsLayout({
                     </div>
                   </div>
                 )}
-
-                {/* Sidebar Ad */}
-                <AdBanner 
-                  adSlot="pdf-sidebar"
-                  adFormat="auto"
-                  className="w-full"
-                />
+                
               </div>
             </ScrollArea>
           </div>
